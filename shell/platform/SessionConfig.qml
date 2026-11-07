@@ -49,20 +49,32 @@ Singleton {
     // The request's ticket (answered() names it), or 0 when there is no Hyprland to ask. `answerMs`: how long its answer may
     // take (a display trial's reload gets longer than the input files': Tokens.settingsDisplayTrialAnswerMs).
     function reload(why: string, answerMs: int): int {
+        return root.ask(why, answerMs, false);
+    }
+
+    // The same request without its journal lines (a caller that logs the state it acts on itself: the display without a mode,
+    // asked again every minute while it lasts, would otherwise put a line in the journal every minute all night).
+    function reloadQuietly(why: string, answerMs: int): int {
+        return root.ask(why, answerMs, true);
+    }
+
+    function ask(why: string, answerMs: int, quiet: bool): int {
         const path = Hyprland.requestSocketPath || "";
         if (path === "") {
-            console.info("grassfield-shell: session config: no Hyprland request socket, not read again (" + why + ")");
+            if (!quiet)
+                console.info("grassfield-shell: session config: no Hyprland request socket, not read again (" + why + ")");
             return 0;
         }
         root.reloads++;
-        const request = {"path": path, "ticket": root.reloads, "why": why, "answerMs": answerMs > 0 ? answerMs : Tokens.materialBlurAnswerMs};
+        const request = {"path": path, "ticket": root.reloads, "why": why, "answerMs": answerMs > 0 ? answerMs : Tokens.materialBlurAnswerMs, "quiet": quiet};
         if (root.waiting.length > 0 || root.pacmanLocked()) {
             if (root.waiting.length === 0) {
                 root.waited = 0;
                 lockPoll.restart();
             }
             root.waiting = root.waiting.concat([request]);
-            console.info("grassfield-shell: session config: pacman holds its database lock, read again once it is released (" + why + ")");
+            if (!quiet)
+                console.info("grassfield-shell: session config: pacman holds its database lock, read again once it is released (" + why + ")");
             return request.ticket;
         }
         root.send(request);
@@ -70,7 +82,8 @@ Singleton {
     }
 
     function send(request: var): void {
-        console.info("grassfield-shell: session config read again (" + request.why + ")");
+        if (!request.quiet)
+            console.info("grassfield-shell: session config read again (" + request.why + ")");
         reloadSocket.createObject(root, {"path": request.path, "ticket": request.ticket, "answerMs": request.answerMs});
     }
 

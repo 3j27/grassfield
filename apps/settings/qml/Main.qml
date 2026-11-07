@@ -1010,6 +1010,8 @@ Window {
     ArrangeSheet {
         id: displayArrange
         onArranged: positions => (page.item as DisplaysPage)?.arrange(positions)
+        // The menu bar dragged to another display (ADR-0044): that display becomes the main one, at once.
+        onMainChosen: name => (page.item as DisplaysPage)?.makeMain(name)
     }
 
     Component {

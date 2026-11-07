@@ -12,6 +12,8 @@ Item {
 
     property var monitors: []
     property string selected: ""
+    // The main display's output name (ADR-0044): with several displays, "Main display" under its name.
+    property string mainName: ""
     // The pane's width (the band spans it, not just the column).
     property real paneWidth: width
 
@@ -72,11 +74,11 @@ Item {
                 required property var modelData
                 readonly property bool isSelected: entry.modelData.name === root.selected
 
-                width: Math.max(Tokens.settingsDisplayPictureWidth, label.implicitWidth)
+                width: Math.max(Tokens.settingsDisplayPictureWidth, label.implicitWidth, roleLine.visible ? roleLine.implicitWidth : 0)
                 height: Tokens.settingsDisplayNameBaseline - Tokens.settingsDisplayPictureTop + label.height - label.baselineOffset
                 activeFocusOnTab: root.several
                 Accessible.role: Accessible.RadioButton
-                Accessible.name: label.text
+                Accessible.name: roleLine.visible ? label.text + ", " + roleLine.text : label.text
                 Accessible.checkable: true
                 Accessible.checked: entry.isSelected
                 Accessible.focusable: root.several
@@ -106,6 +108,19 @@ Item {
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                     font.weight: entry.isSelected || !root.several ? Tokens.typographyMenuBoldWeight : Font.Normal
+                }
+
+                // Which display is the main one, at a glance (the owner's rc6 report: the role could not be found).
+                Text {
+                    id: roleLine
+                    visible: root.several && entry.modelData.name === root.mainName
+                    textFormat: Text.PlainText
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Tokens.settingsDisplayRoleBaseline - Tokens.settingsDisplayPictureTop - baselineOffset
+                    text: qsTr("Main display")
+                    color: Appearance.windowSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
                 }
 
                 Rectangle {

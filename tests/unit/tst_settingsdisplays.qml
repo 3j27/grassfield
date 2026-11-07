@@ -301,6 +301,85 @@ TestCase {
         compare(DisplayRole.resolve(u.store.values["displays.main"], [{name: "HDMI-A-1", make: "Dell", model: "DELL", serial: "ABC"}, {name: "eDP-1", make: "LG", model: "LGD", serial: "123"}]).name, "HDMI-A-1");
     }
 
+    // The owner's rc6 report: "there is no way to set the main display with several displays". The display shown first is the
+    // main one, and its "Use as" pop-up offered only "Main display". macOS 27: every display's pop-up offers Main display and
+    // Extended display; Extended display on the main one hands the role on (the built-in panel, else the next display). The
+    // row is the first of the display's settings, and the band names the main display.
+    function test_page_useAsOnEveryDisplay() {
+        const monitors = [{name: "DP-1", make: "Dell", model: "U2723", serial: "A1", description: "Dell U2723 A1", width: 2560, height: 1440, refreshRate: 60, x: 0, y: 0, scale: 1, transform: 0, availableModes: []},
+                          {name: "DP-2", make: "Dell", model: "U2723", serial: "B2", description: "Dell U2723 B2", width: 2560, height: 1440, refreshRate: 60, x: 2560, y: 0, scale: 1, transform: 0, availableModes: []},
+                          {name: "HDMI-A-1", make: "LG", model: "TV", serial: "", description: "LG TV", width: 1920, height: 1080, refreshRate: 60, x: 5120, y: 0, scale: 1, transform: 0, availableModes: []}];
+        const u = makePage(false, monitors);
+        // No built-in panel, no choice: the first display is main, and it is the one shown.
+        compare(u.page.mainName, "DP-1");
+        compare(u.page.monitor.name, "DP-1");
+        compare(u.page.useAsChoices.map(c => c.id), ["main", "extended"]);
+        compare(u.page.useAsValue, "main");
+        // Extended display on the main one: the next display takes the role.
+        u.page.useAs("extended");
+        compare(u.store.sets.length, 1);
+        compare(u.page.mainName, "DP-2");
+        compare(u.page.useAsValue, "extended");
+        // Main display on another one.
+        u.page.selected = "HDMI-A-1";
+        compare(u.page.useAsValue, "extended");
+        u.page.useAs("main");
+        compare(u.page.mainName, "HDMI-A-1");
+        compare(u.page.useAsValue, "main");
+        // Choosing what already holds changes nothing.
+        u.page.useAs("main");
+        u.page.selected = "DP-1";
+        u.page.useAs("extended");
+        compare(u.store.sets.length, 2);
+        // The row comes first, before the resolution choices.
+        const useAs = find(u.page, x => x.accessibleName === qsTr("Use as") && x.model !== undefined);
+        verify(useAs !== null);
+        const choices = find(u.page, x => x.choices !== undefined && x.pending !== undefined);
+        verify(choices !== null);
+        waitForRendering(u.page);
+        const above = useAs.mapToItem(u.page, 0, 0).y, below = choices.mapToItem(u.page, 0, 0).y;
+        verify(above < below, "Use as is above the resolution: " + above + " / " + below);
+        // One display: no "Use as".
+        const one = makePage(false, [monitors[0]]);
+        compare(one.page.useAsChoices.length, 0);
+    }
+
+    // macOS 27 Arrange: drag the menu bar to another display to make it the main display. The sheet hands the choice back on
+    // Done, with the moved displays; Cancel drops it.
+    function test_arrangeMovesTheMenuBar() {
+        const monitors = [{name: "DP-1", model: "A", width: 1920, height: 1080, x: 0, y: 0, scale: 1, transform: 0},
+                          {name: "DP-2", model: "B", width: 1920, height: 1080, x: 1920, y: 0, scale: 1, transform: 0}];
+        const c = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/ArrangeSheet.qml"));
+        compare(c.status, Component.Ready, c.errorString());
+        const sheet = createTemporaryObject(c, testCase, {width: 600, height: 500});
+        const spy = createTemporaryObject(spyComponent, testCase, {target: sheet, signalName: "mainChosen"});
+        const moved = createTemporaryObject(spyComponent, testCase, {target: sheet, signalName: "arranged"});
+        sheet.mainName = "DP-1";
+        sheet.openFor(monitors);
+        compare(sheet.barOn, "DP-1");
+        // The bar dropped where no display is stays where it was.
+        sheet.dropMenuBar(-5000, -5000);
+        compare(sheet.barOn, "DP-1");
+        // Dropped on the other display's tile (layout pixels): it moves there.
+        sheet.dropMenuBar(1920 + 400, 300);
+        compare(sheet.barOn, "DP-2");
+        sheet.accepted();
+        compare(spy.count, 1);
+        compare(spy.signalArguments[0][0], "DP-2");
+        compare(moved.count, 0);
+        // Opened again: the bar starts on the main display; Done without a move says nothing.
+        sheet.mainName = "DP-2";
+        sheet.openFor(monitors);
+        compare(sheet.barOn, "DP-2");
+        sheet.accepted();
+        compare(spy.count, 1);
+    }
+
+    Component {
+        id: spyComponent
+        SignalSpy {}
+    }
+
     function find(item, pred) {
         if (!item)
             return null;
@@ -490,6 +569,10 @@ TestCase {
         modes: [{w: 2880, h: 1800, hz: 120}, {w: 2880, h: 1800, hz: 60}, {w: 2880, h: 1800, hz: 59.94}, {w: 1920, h: 1200, hz: 60}, {w: 2880, h: 1800, hz: 120.001}]})
     readonly property var monitor24: ({name: "DP-1", description: "Dell Inc. DELL P2419H 4GHXRV2", width: 1920, height: 1080, physicalWidth: 530,
         physicalHeight: 300, refreshRate: 60, x: 1440, y: 0, scale: 1, transform: 0, modes: []})
+    // The owner's development laptop as Hyprland describes it (hyprctl monitors -j, 2026-11-07).
+    readonly property var ownerPanel: ({name: "eDP-1", description: "AU Optronics 0x2E8D", make: "AU Optronics", model: "0x2E8D", width: 1920,
+        height: 1080, physicalWidth: 340, physicalHeight: 190, refreshRate: 60.056, x: 0, y: 0, scale: 1.25, transform: 0,
+        modes: [{w: 1920, h: 1080, hz: 60.06}, {w: 1920, h: 1080, hz: 48.05}]})
 
     function test_parseState() {
         const text = JSON.stringify({v: 1, monitors: [
@@ -524,6 +607,46 @@ TestCase {
         compare(Displays.scaleChoices(monitor24).map(x => x.scale), [1.25, 1]);
         // Without a physical size: 1.
         compare(Displays.defaultScale(Object.assign({}, panel, {physicalWidth: 0})), 1);
+    }
+
+    // The owner's report (rc6, development laptop): a 15.6" 1920 x 1080 panel (144 ppi, Hyprland's default 1.5) kept at 1.25 by
+    // displays.conf, and 100 % could not be chosen: the span stopped at the default / 1.25 = 1.2. A display below
+    // Displays.NATIVE_MAX_PPI (150) always offers its native resolution as More Space, as macOS does for a display that is not
+    // Retina; a denser one keeps macOS's span (review of e0a6e922: the 4K 27" lost its 3072 x 1728 step to native 3840 x 2160).
+    function test_nativeResolutionOffered() {
+        compare(Displays.defaultScale(ownerPanel), 1.5);
+        verify(Math.abs(Displays.ppi(ownerPanel) - 143.7) < 0.5, String(Displays.ppi(ownerPanel)));
+        const c = Displays.scaleChoices(ownerPanel);
+        verify(c.length <= Displays.MAX_CHOICES, JSON.stringify(c));
+        const last = c[c.length - 1];
+        compare(last.scale, 1);
+        compare(last.width + "x" + last.height, "1920x1080");
+        // The scale in use and the default stay offered.
+        verify(c.some(x => x.scale === 1.25));
+        compare(c.filter(x => x.isDefault).map(x => x.scale), [1.5]);
+        compare(Displays.currentChoice(c, 1.25), c.findIndex(x => x.scale === 1.25));
+        // The native choice is a trial line with scale 1, as displays.lua reads it.
+        compare(Displays.lineFor(ownerPanel, {scale: last.scale}), "v1\tdesc:AU Optronics 0x2E8D\t1920x1080@60.06\t0x0\t1\t0");
+        // At 100 % the panel still offers the same span (1.25 is kept as a choice in between).
+        const at1 = Displays.scaleChoices(Object.assign({}, ownerPanel, {scale: 1}));
+        compare(at1[at1.length - 1].scale, 1);
+        compare(Displays.currentChoice(at1, 1), at1.length - 1);
+        // A high-density panel (default 2) keeps macOS's span: no native resolution.
+        verify(!Displays.scaleChoices(panel).some(x => x.scale === 1));
+        // A 4K 27" (163 ppi) and a 4K 24" (185 ppi): Hyprland's default 1.5 too, but above 150 ppi: macOS's span, unchanged from
+        // rc6, More Space 3072 x 1728, no native 3840 x 2160.
+        const k27 = {name: "DP-1", description: "Dell U2723QE", width: 3840, height: 2160, physicalWidth: 597, physicalHeight: 336, refreshRate: 60,
+            x: 0, y: 0, scale: 1.5, transform: 0, modes: []};
+        const k24 = Object.assign({}, k27, {name: "DP-2", physicalWidth: 527, physicalHeight: 296});
+        for (const m of [k27, k24]) {
+            compare(Displays.defaultScale(m), 1.5);
+            verify(Displays.ppi(m) > Displays.NATIVE_MAX_PPI, m.name + " " + Displays.ppi(m));
+            compare(Displays.scaleChoices(m).map(x => x.width + "x" + x.height), ["2304x1296", "2400x1350", "2560x1440", "2880x1620", "3072x1728"], m.name);
+        }
+        verify(Math.abs(Displays.ppi(k27) - 163.2) < 0.5, String(Displays.ppi(k27)));
+        verify(Math.abs(Displays.ppi(k24) - 185.1) < 0.5, String(Displays.ppi(k24)));
+        // Without a physical size the density is unknown: no native step is added (Hyprland's default is then 1, already native).
+        compare(Displays.ppi(Object.assign({}, k27, {physicalWidth: 0})), 0);
     }
 
     function test_refreshRates() {

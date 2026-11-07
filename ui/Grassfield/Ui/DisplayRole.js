@@ -224,3 +224,16 @@ function withMain(entries, displays, mainKey) {
     const rest = normalize(entries).filter(e => !sameSet(e.set, set));
     return [{set: set, main: mainKey}].concat(rest).slice(0, MAX_ENTRIES);
 }
+
+// The display that takes the main role when the display keyed `key` gives it up (macOS: Use as > Extended display on the main
+// display): the built-in panel when it is another display, else the first other display in the compositor's order; "" when
+// there is no other display.
+function successor(displays, key) {
+    const list = Array.isArray(displays) ? displays : [];
+    const keys = identities(list);
+    const others = list.map((d, i) => ({d: d, key: keys[i]})).filter(o => o.key !== key);
+    if (others.length === 0)
+        return "";
+    const builtin = others.find(o => isBuiltin(o.d));
+    return (builtin || others[0]).key;
+}

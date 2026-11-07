@@ -50,6 +50,9 @@ Scope {
     // Prefix for long-lived children: die with the shell (PR_SET_PDEATHSIG, kept across exec).
     readonly property var dieWithShell: ["setpriv", "--pdeathsig", "TERM", "--"]
 
+    // The computer resumed from sleep (after the lock decisions above): Idle lights the lock screen (Idle.wakeAfterResume).
+    signal resumed
+
     function take(): void {
         if (dev || inhibitor.running)
             return;
@@ -90,6 +93,7 @@ Scope {
         sleeping = false;
         releaseTimer.stop();
         take();
+        root.resumed();
     }
 
     function handleLine(line: string): void {

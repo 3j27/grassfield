@@ -55,35 +55,55 @@ function rotated(m) {
     return m.transform % 2 === 1;
 }
 
+// The monitor's pixels per inch, from its mode and its physical size; 0 when the size is not known.
+function ppi(m) {
+    const mmW = m.physicalWidth, mmH = m.physicalHeight;
+    if (!(mmW > 0) || !(mmH > 0))
+        return 0;
+    const inches = Math.sqrt(mmW * mmW + mmH * mmH) / 25.4;
+    return Math.sqrt(m.width * m.width + m.height * m.height) / inches;
+}
+
 // Hyprland's own default for a panel (its "auto" scale): 2 above 200 pixels per inch, 1.5 above 140, else 1. Without a physical
 // size, 1.
 function defaultScale(m) {
-    const mmW = m.physicalWidth, mmH = m.physicalHeight;
-    if (mmW <= 0 || mmH <= 0)
-        return 1;
-    const inches = Math.sqrt(mmW * mmW + mmH * mmH) / 25.4;
-    const ppi = Math.sqrt(m.width * m.width + m.height * m.height) / inches;
-    return ppi > 200 ? 2 : ppi > 140 ? 1.5 : 1;
+    const d = ppi(m);
+    return d > 200 ? 2 : d > 140 ? 1.5 : 1;
 }
 
 function whole(v) {
     return Math.abs(v - Math.round(v)) < 0.01;
 }
 
+// Below this density a display is not "Retina" and always offers its native resolution (scale 1) as More Space. macOS's model:
+// its Retina displays start well above it (MacBooks about 220 ppi and more, the 27" Studio Display 218), a third-party 4K 27"
+// (163 ppi) runs scaled with More Space at about 3008 x 1692 (not its native 3840 x 2160, which needs "Show all resolutions"),
+// and a display below about 150 ppi (a 1440p 27" at 109, a 15.6" 1080p laptop panel at 141 to 144) runs at its native
+// resolution. Hyprland's own 1.5 default starts at 140 ppi, so the panels between 140 and 150 (the owner's laptop) are the ones
+// that lost 100 % to the span alone (review of e0a6e922: deciding by default scale gave native to everything up to 200 ppi).
+var NATIVE_MAX_PPI = 150;
+
 // The resolution choices of a monitor, largest text first: [{scale, width, height (logical), isDefault}]. The scales whose
 // logical size is whole and at least MIN_LOGICAL_WIDTH wide, within the span around the default; the default and the monitor's own
-// scale always in; at most MAX_CHOICES, the ends and the default kept, then the scales closest to the default.
+// scale always in, and the native resolution (scale 1) too on a display below NATIVE_MAX_PPI (macOS's More Space on a display
+// that is not Retina is its native resolution; the span alone stopped at the default / MORE_SPACE_RATIO, 1.2 on a 15.6" 1080p
+// panel, so 100 % could not be chosen there: the owner's rc6 report); at most MAX_CHOICES, the ends, the default and the scale
+// in use kept, then the scales closest to the default.
 function scaleChoices(m) {
     const def = defaultScale(m);
+    const density = ppi(m);
     const fits = s => whole(m.width / s) && whole(m.height / s) && Math.round(m.width / s) >= MIN_LOGICAL_WIDTH;
     let list = SCALES.filter(s => s >= 1 && s >= def / MORE_SPACE_RATIO - 1e-6 && s <= def * LARGER_TEXT_RATIO + 1e-6 && fits(s));
-    for (const s of [def, m.scale]) {
+    const always = density > 0 && density < NATIVE_MAX_PPI && fits(1) ? [def, m.scale, 1] : [def, m.scale];
+    for (const s of always) {
         if (!list.some(x => Math.abs(x - s) < 1e-3))
             list.push(s);
     }
     list.sort((a, b) => b - a);
     if (list.length > MAX_CHOICES) {
-        const keep = [list[0], list[list.length - 1], def, m.scale];
+        // The listed value of a scale (Hyprland reports 1.3333333 where the list has 1.333333).
+        const listed = s => list.find(x => Math.abs(x - s) < 1e-3) ?? s;
+        const keep = [list[0], list[list.length - 1], listed(def), listed(m.scale)];
         const rest = list.filter(s => keep.indexOf(s) < 0).sort((a, b) => Math.abs(a - def) - Math.abs(b - def));
         for (const s of rest) {
             if (keep.filter((v, i) => keep.indexOf(v) === i).length >= MAX_CHOICES)

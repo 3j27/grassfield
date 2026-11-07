@@ -5,20 +5,24 @@ import "Displays.js" as Displays
 
 // Displays > Arrange…: the displays as tiles in proportion to their logical size; drag one (or move a focused one with the arrow
 // keys) and it snaps beside the nearest other along a whole edge (Displays.snapBeside). Done hands the new positions back
-// (`arranged`), which the page tries as one change (ADR-0031).
+// (`arranged`), which the page tries as one change (ADR-0031). The main display's tile has the solid menu bar; dragging that
+// bar onto another display makes it the main display on Done (`mainChosen`, macOS 27 Arrange; ADR-0044).
 Sheet {
     id: root
 
     property var monitors: []
     // The main display's output name: its tile has the solid menu bar (ADR-0044).
     property string mainName: ""
+    // The display the menu bar was dragged to in this sheet (the main display until then).
+    property string barOn: ""
     // name -> {x, y}: where each display is placed, in layout pixels.
     property var placed: ({})
 
     signal arranged(var positions)
+    signal mainChosen(string name)
 
     title: qsTr("Arrange Displays")
-    message: qsTr("Drag a display to place it beside another.")
+    message: qsTr("Drag a display to place it beside another. Drag the menu bar to another display to make it the main display.")
     confirmText: qsTr("Done")
 
     function openFor(list: var): void {
@@ -27,7 +31,25 @@ Sheet {
         for (const m of list)
             p[m.name] = {x: m.x, y: m.y};
         root.placed = p;
+        root.barOn = root.mainName;
         root.open();
+    }
+
+    // The display placed under (x, y), in layout pixels, or "".
+    function tileAt(x: real, y: real): string {
+        for (const m of root.monitors) {
+            const p = root.at(m), s = Displays.logicalSize(p);
+            if (x >= p.x && x < p.x + s.w && y >= p.y && y < p.y + s.h)
+                return m.name;
+        }
+        return "";
+    }
+
+    // The menu bar dropped at (x, y), in layout pixels: on a display, that display gets it; elsewhere it stays where it was.
+    function dropMenuBar(x: real, y: real): void {
+        const name = root.tileAt(x, y);
+        if (name !== "")
+            root.barOn = name;
     }
 
     // A monitor where it is placed.
@@ -64,6 +86,8 @@ Sheet {
         }
         if (moved.length > 0)
             root.arranged(moved);
+        if (root.barOn !== "" && root.barOn !== root.mainName)
+            root.mainChosen(root.barOn);
     }
 
     Item {
@@ -131,7 +155,7 @@ Sheet {
                 Accessible.role: Accessible.Button
                 Accessible.name: Displays.isBuiltIn(tile.modelData) ? qsTr("Built-in Display") : (String(tile.modelData.model).trim() || tile.modelData.name)
                 Accessible.description: tile.isMain ? qsTr("Main display. At %1, %2").arg(tile.where.x).arg(tile.where.y) : qsTr("At %1, %2").arg(tile.where.x).arg(tile.where.y)
-                readonly property bool isMain: tile.modelData.name === root.mainName
+                readonly property bool isMain: tile.modelData.name === root.barOn
 
                 // The shared ring outside the display, after a key only (ADR-0039 step 7).
                 KeyFocus {
@@ -212,7 +236,50 @@ Sheet {
                         root.drop(tile.modelData, x, y);
                     }
                 }
+
+                // The menu bar's grip (the main display's tile only): drag it onto another display to make that one main.
+                MouseArea {
+                    enabled: tile.isMain && root.monitors.length > 1
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: Tokens.settingsDisplayMenuBarGrab
+                    cursorShape: enabled ? Qt.OpenHandCursor : Qt.ArrowCursor
+                    onPressed: mouse => {
+                        const p = mapToItem(area, mouse.x, mouse.y);
+                        area.ghostGrab = Qt.point(mouse.x, mouse.y);
+                        area.ghostWidth = tile.width;
+                        area.ghostAt = Qt.point(p.x - mouse.x, p.y - mouse.y);
+                        area.ghostShown = true;
+                    }
+                    onPositionChanged: mouse => {
+                        const p = mapToItem(area, mouse.x, mouse.y);
+                        area.ghostAt = Qt.point(p.x - area.ghostGrab.x, p.y - area.ghostGrab.y);
+                    }
+                    onReleased: mouse => {
+                        const p = mapToItem(area, mouse.x, mouse.y);
+                        area.ghostShown = false;
+                        root.dropMenuBar(area.view.x + (p.x - area.view.ox) / area.view.k, area.view.y + (p.y - area.view.oy) / area.view.k);
+                    }
+                    onCanceled: area.ghostShown = false
+                }
             }
+        }
+
+        // The menu bar while it is dragged, under the pointer.
+        property bool ghostShown: false
+        property point ghostAt: Qt.point(0, 0)
+        property point ghostGrab: Qt.point(0, 0)
+        property real ghostWidth: 0
+
+        Rectangle {
+            visible: area.ghostShown
+            x: area.ghostAt.x
+            y: area.ghostAt.y
+            width: area.ghostWidth
+            height: Tokens.settingsDisplayMenuBarHeight
+            radius: Tokens.settingsDisplayRadius
+            color: Appearance.colors.text
         }
     }
 }
