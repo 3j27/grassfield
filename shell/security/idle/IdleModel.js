@@ -47,6 +47,22 @@ var DISPLAY_OFF_SECONDS = 30;
 var ACQUIRE_DISPLAYS_ON_MS = 2000;
 var ACQUIRE_DISPLAYS_ON_TRIES = 5;
 
+// A resume from sleep lights the lock screen (macOS: waking the computer lights its displays; without input they go off again
+// after the lock screen's delay; the owner's rc6 report: "waking from sleep is very slow"). Hyprland keeps the displays off
+// across a suspend that started with them off (the automatic sleep always does), and the key that woke the computer is usually
+// not delivered as input, so they stayed dark until a second input. Only when this module turned them off (`displayOff`) and
+// the session is locked (`locked`, Lock.locked: the lock before sleep is the sleep inhibitor's; a session found unlocked at the
+// resume is locked first by afterResume), and no new sleep is under way (`sleeping`, SleepInhibitor.sleeping: a sleep that
+// started before the wake was due is not lit; review of c94e3195): display only, exact values only (anything else changes
+// nothing).
+function wakeAtResume(displayOff, locked, sleeping) {
+    return displayOff === true && locked === true && sleeping === false;
+}
+
+// How long after logind's PrepareForSleep(false) the lock screen is lit: the outputs are coming back then (a DPMS commit that
+// fails is retried only once by Hyprland 0.56.2), so the request waits a moment. A monotonic Timer: the time asleep never counts.
+var RESUME_WAKE_MS = 1500;
+
 // Display power-off while the session is unlocked (macOS 27 Lock Screen: Turn display off on battery / on power adapter when
 // inactive): the minutes of the power source in use, as seconds; 0 = never. The values arrive read through the contract
 // (integers 0..240); anything else is never: turning the displays off is not what keeps the session safe (the lock is, and it

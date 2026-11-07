@@ -1943,6 +1943,8 @@ QtObject {
     readonly property int settingsDisplayPictureHeight: 75
     // the display's name (13 pt bold): baseline 137 below the pane's top (189 below the window's) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayNameBaseline: 137
+    // estimate: with several displays, "Main display" (11 pt, secondary) under the main display's name, baseline 151 below the pane's top, above the separator (no macOS 27 capture with two displays) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayRoleBaseline: 151
     // estimate: between the pictures of two displays in the band (no macOS 27 capture with two displays) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayPictureGap: 32
     // the band darkens to the text colour at this opacity at its bottom (244 on 255), from nothing at its top [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
@@ -2135,6 +2137,8 @@ QtObject {
     readonly property real settingsDisplayNudge: 0.1
     // Arrange…: the menu bar drawn along the top of each display's tile [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayMenuBarHeight: 3
+    // estimate: Arrange…, the strip along the main display's tile top that takes the menu bar's drag (macOS 27: drag the menu bar to another display) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
+    readonly property int settingsDisplayMenuBarGrab: 12
     // estimate: the shell reads the session configuration again this long after the last write of a Mouse, Trackpad or Keyboard choice (a slider writes on every step; ADR-0031 amendment) [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsInputReloadMs: 500
     // Keyboard's first group, the two repeat sliders side by side, 75 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]

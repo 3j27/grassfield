@@ -412,6 +412,87 @@ TestCase {
         verify(/if \(!sleepMonitor\.enabled \|\| !IdleModel\.autoSleepDue\(root\.autoSleepArmed, sleepMonitor\.isIdle, root\.autoSleepWaited, root\.autoSleepAsked\)\)\s*return;/.test(text));
     }
 
+    // The owner's rc6 report ("waking from sleep is very slow"). macOS: waking the computer lights its displays on the lock
+    // screen; without input they go off again after the lock screen's delay. Hyprland keeps the displays off across a suspend
+    // that started with them off (the automatic sleep always does), and the key that woke the computer is usually not delivered
+    // as input, so they stayed dark until a second input. Only a session that is locked is lit, and only when this module had
+    // turned the displays off, and never while a new sleep is under way (review of c94e3195): anything else (unknown values
+    // included) changes nothing.
+    function test_wakeAtResume() {
+        verify(IdleModel.wakeAtResume(true, true, false));
+        verify(!IdleModel.wakeAtResume(false, true, false));
+        verify(!IdleModel.wakeAtResume(true, false, false));
+        verify(!IdleModel.wakeAtResume(true, true, true), "a new sleep under way");
+        for (const v of [undefined, null, 1, "true", {}])
+            verify(!IdleModel.wakeAtResume(v, true, false) && !IdleModel.wakeAtResume(true, v, false) && !IdleModel.wakeAtResume(true, true, v), String(v));
+        // The resume is waited on a little (logind sends PrepareForSleep(false) as the outputs come back): a monotonic Timer.
+        verify(IdleModel.RESUME_WAKE_MS >= 500 && IdleModel.RESUME_WAKE_MS <= 3000, String(IdleModel.RESUME_WAKE_MS));
+    }
+
+    // Idle.qml: the resume path only starts the lock screen's display-off countdown over (its idle monitor and the unlocked one
+    // re-armed); it never locks, unlocks, releases or delays a lock, and it reads the decision afresh when the Timer fires.
+    function test_resumeLightsTheLockScreenOnly() {
+        const text = source();
+        const wake = functionBody(text, "wakeAfterResume");
+        verify(wake.length > 0, "wakeAfterResume found");
+        verify(/^\s*if \(!IdleModel\.wakeAtResume\(root\.displayOff, Lock\.locked, sleepInhibitor\.sleeping\)\)\s*return;/.test(wake), "the decision, read afresh, the sleep in progress included");
+        verify(/root\.rearmingInactive = true;\s*root\.rearmingLocked = true;\s*Qt\.callLater\(root\.armAfterResume\);\s*$/.test(wake), "disarmed, then armed again one turn later");
+        verify(!/Lock\.(lock|unlock|release|requestUnlock)\(|autoSleep|systemctl|dispatch/.test(wake), "the resume path only re-arms the monitors");
+        // The lock screen's monitor is disarmed while re-arming (the displays come on), then armed again: 30 s from now.
+        verify(/enabled: Lock\.holding && root\.displayOffSeconds > 0 && !root\.rearmingLocked/.test(text));
+        // The Timer is started by the sleep inhibitor's resume, and nothing else starts it.
+        verify(/onResumed: resumeWake\.restart\(\)/.test(text));
+        compare(text.split("\n").filter(l => l.indexOf("resumeWake.restart()") >= 0).length, 1);
+        verify(/Timer \{\s*id: resumeWake\s*interval: IdleModel\.RESUME_WAKE_MS\s*onTriggered: root\.wakeAfterResume\(\)\s*\}/.test(text));
+    }
+
+    // Review of c94e3195: without the re-arm the lock screen's display-off stays disarmed for the rest of the session (lit all
+    // night, no automatic sleep). The one place that disarms it is wakeAfterResume, the one that arms it again armAfterResume,
+    // which sets both flags back to false and does nothing else; nothing else writes them.
+    function test_resumeArmsTheMonitorsAgain() {
+        const text = source();
+        const arm = functionBody(text, "armAfterResume");
+        verify(/^\s*root\.rearmingInactive = false;\s*root\.rearmingLocked = false;\s*$/.test(arm), "armAfterResume: " + arm);
+        compare(text.split("\n").filter(l => /\brearmingLocked\s*=/.test(l)).length, 2, "rearmingLocked is written twice: true in wakeAfterResume, false in armAfterResume");
+        compare(text.split("\n").filter(l => l.indexOf("Qt.callLater(root.armAfterResume)") >= 0).length, 1);
+        verify(/property bool rearmingLocked: false/.test(text));
+    }
+
+    // Review of c94e3195: the resume Timer does not outlive a new sleep: it stops when the sleep starts (the sleep inhibitor's
+    // `sleeping`), and wakeAfterResume reads `sleeping` too (above).
+    function test_resumeTimerStopsWhenSleepStarts() {
+        const text = source();
+        verify(/Connections \{\s*target: sleepInhibitor\s*function onSleepingChanged\(\): void \{\s*if \(sleepInhibitor\.sleeping\)\s*resumeWake\.stop\(\);\s*\}\s*\}/.test(text));
+        // The inhibitor's flag the decision reads is the one beforeSleep sets first and afterResume clears.
+        const inhibitor = read("../../shell/security/idle/SleepInhibitor.qml");
+        verify(/function beforeSleep\(\): void \{\s*console\.info\([^\n]*\);\s*sleeping = true;/.test(inhibitor));
+        verify(/property bool sleeping: false/.test(inhibitor));
+    }
+
+    // Review of c94e3195: `resumed` is emitted last in afterResume, after its lock decision (a resume this shell did not lock
+    // for locks first), the clock refresh, the end of `sleeping` and the inhibitor taken again; and only there.
+    function test_resumedIsEmittedLast() {
+        const inhibitor = read("../../shell/security/idle/SleepInhibitor.qml");
+        const after = functionBody(inhibitor, "afterResume");
+        verify(after.length > 0, "afterResume found");
+        verify(/Lock\.lock\("resume"\);[\s\S]*Lock\.resumed\(\);\s*sleeping = false;\s*releaseTimer\.stop\(\);\s*take\(\);\s*root\.resumed\(\);\s*$/.test(after), "afterResume: " + after);
+        compare(inhibitor.split("\n").filter(l => l.indexOf("root.resumed()") >= 0).length, 1);
+    }
+
+    // The body of `function <name>(): void { ... }` at the Scope's indent (four spaces), or "".
+    function functionBody(text, name) {
+        const m = new RegExp("\\n    function " + name + "\\(\\): void \\{([\\s\\S]*?)\\n    \\}").exec(text);
+        return m ? m[1] : "";
+    }
+
+    function read(path) {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl(path), false);
+        xhr.send();
+        verify(xhr.responseText.length > 1000, path + " read (QML_XHR_ALLOW_FILE_READ=1)");
+        return xhr.responseText;
+    }
+
     function source() {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl("../../shell/security/idle/Idle.qml"), false);

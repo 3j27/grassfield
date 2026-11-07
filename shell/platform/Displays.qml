@@ -52,6 +52,7 @@ Singleton {
         // `described` is also what the main display's identity reads (services/MainDisplay.qml: make, model and serial), so it is
         // set whether or not there is a file to write.
         root.described = monitors;
+        root.checkModeless(monitors);
         if (root.statePath === "")
             return;
         if (stateFile.path !== root.statePath)
@@ -65,6 +66,56 @@ Singleton {
     }
 
     onBacklightChanged: publishDebounce.restart()
+
+    // ---- A display on without a mode (DisplaysFile.modeless; the owner's rc6 report: external displays black after sleep until
+    // unplugged and plugged back). Hyprland gives up on a monitor that answered no video modes (asleep or switched off when it
+    // was probed) and nothing fires when it powers on: the configuration is read again, after DisplaysFile.recoveryDelayMs, until
+    // every display has a mode (Omarchy's own session does the same with omarchy-hyprland-monitor-watch, which Grassfield's
+    // autostart does not run). While locked the lock refreshes the monitors every second, so a display that gets its mode is
+    // seen at once; the look goes on with the back-off for as long as one stays without a mode. Quickshell's plain `monitors`
+    // answer lists every enabled output that is not a mirror, whatever its mode (Hyprland 0.56.2 MonitorState); a mirror
+    // without a mode is only in `monitors all` and is not recovered here (docs/specs/settings.md Known limitations).
+    property var modelessNames: []
+    property int recoveryAttempts: 0
+
+    function checkModeless(monitors: var): void {
+        const blank = DisplaysFile.modeless(monitors);
+        // The journal hears of a change of state only (on without a mode, a mode again), never of each look or reload: a display
+        // switched off at its button can stay without a mode all night.
+        if (blank.length === 0) {
+            if (root.modelessNames.length > 0)
+                console.info("grassfield-shell: displays: " + root.modelessNames.join(", ") + " has a mode again (after " + root.recoveryAttempts + " reloads)");
+            root.modelessNames = [];
+            root.recoveryAttempts = 0;
+            recovery.stop();
+            return;
+        }
+        if (root.modelessNames.join(",") !== blank.join(","))
+            console.warn("grassfield-shell: displays: " + blank.join(", ") + " is on without a mode (0x0); the configuration is read again until it has one");
+        root.modelessNames = blank;
+        if (!recovery.running) {
+            recovery.interval = DisplaysFile.recoveryDelayMs(root.recoveryAttempts);
+            recovery.restart();
+        }
+    }
+
+    Timer {
+        id: recovery
+        onTriggered: {
+            const blank = DisplaysFile.modeless(root.described);
+            if (blank.length === 0) {
+                root.checkModeless(root.described);
+                return;
+            }
+            // A display trial reads the configuration itself (and takes it back): look again after it.
+            if (root.running === "") {
+                root.recoveryAttempts++;
+                SessionConfig.reloadQuietly("display without a mode", Tokens.materialBlurAnswerMs);
+            }
+            recovery.interval = DisplaysFile.recoveryDelayMs(root.recoveryAttempts);
+            recovery.restart();
+        }
+    }
 
     // Hyprland reads its configuration again (the trial applied or taken back): SessionConfig's one request.
     function reload(): int {
@@ -150,6 +201,11 @@ Singleton {
                 || event.name === "monitorremovedv2" || event.name === "configreloaded") {
                 Hyprland.refreshMonitors();
                 publishDebounce.restart();
+                // A display arriving or leaving, in the journal with its time: what a wake from sleep costs is read from these
+                // lines next to the kernel's "PM: suspend exit" and the lock's (the owner's rc6 report: slow wake). The v2
+                // event carries the id and the description too: only the connector name is logged (no serial in the journal).
+                if (event.name === "monitoraddedv2" || event.name === "monitorremovedv2")
+                    console.info("grassfield-shell: displays: " + (event.name === "monitoraddedv2" ? "added " : "removed ") + DisplaysFile.eventOutput(event.data));
             }
         }
     }

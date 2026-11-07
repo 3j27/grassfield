@@ -112,3 +112,37 @@ function answered(trialState, running, applying, ticket, ok) {
         return {id: running, state: "applied"};
     return trialState;
 }
+
+// ---- A display without a mode (the owner's rc6 report: external displays black after sleep until unplugged) ----
+// A monitor that was asleep or switched off when it was probed answers a partial EDID with no video modes: Hyprland brings it
+// up at 0x0 (Hyprland 0.56.2 Monitor.cpp applyMonitorRule: "NO FALLBACK MODES", three retries a second apart, then it gives up)
+// and the screen stays black. Powering it on fires no hot-plug, so nothing asks again; a configuration reload makes Hyprland
+// apply its rule, and read its modes, once more. Omarchy's own session does exactly that (omarchy-hyprland-monitor-watch and
+// omarchy-hyprland-monitor-modeless: an enabled monitor at 0x0, then a reload, with a back-off); Grassfield's session replaced
+// Omarchy's autostart and did not.
+
+// The names of the monitors (Hyprland's `monitors` answer, lastIpcObject values) that are enabled without a mode: a width or a
+// height of exactly 0. An answer without a name or without numeric sizes (in flight) is not one.
+function modeless(monitors) {
+    const list = Array.isArray(monitors) ? monitors : [];
+    return list.filter(o => o && typeof o === "object" && str(o.name) !== "" && o.disabled !== true && typeof o.width === "number"
+        && typeof o.height === "number" && (o.width === 0 || o.height === 0)).map(o => o.name);
+}
+
+// The connector name of a `monitoraddedv2` / `monitorremovedv2` event ("<id>,<name>,<description>"), for the journal: only a
+// plain connector name (letters, digits, '-', '_', '.', ':', at most 32), never the description (it holds the serial).
+function eventOutput(data) {
+    const name = String(data === undefined || data === null ? "" : data).split(",")[1] || "";
+    return /^[A-Za-z0-9._:-]{1,32}$/.test(name) ? name : "(unnamed)";
+}
+
+var RECOVERY_FIRST_MS = 3000;
+var RECOVERY_MAX_MS = 60000;
+
+// The wait before the next look at a display without a mode, after `attempts` reloads: 3 s (Hyprland's own three retries are
+// over), doubled after each reload, at most a minute (Omarchy's back-off: a display switched off at its own button can stay
+// without a mode all night).
+function recoveryDelayMs(attempts) {
+    const n = typeof attempts === "number" && isFinite(attempts) && attempts > 0 ? Math.floor(attempts) : 0;
+    return n >= 5 ? RECOVERY_MAX_MS : Math.min(RECOVERY_MAX_MS, RECOVERY_FIRST_MS * Math.pow(2, n));
+}

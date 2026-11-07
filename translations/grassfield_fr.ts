@@ -1715,8 +1715,8 @@
         <translation>Disposer les écrans</translation>
     </message>
     <message>
-        <source>Drag a display to place it beside another.</source>
-        <translation>Faites glisser un écran pour le placer à côté d’un autre.</translation>
+        <source>Drag a display to place it beside another. Drag the menu bar to another display to make it the main display.</source>
+        <translation>Faites glisser un écran pour le placer à côté d’un autre. Faites glisser la barre des menus sur un autre écran pour en faire l’écran principal.</translation>
     </message>
     <message>
         <source>Done</source>
@@ -4469,6 +4469,10 @@
     <message>
         <source>Displays</source>
         <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Main display</source>
+        <translation>Écran principal</translation>
     </message>
 </context>
 <context>

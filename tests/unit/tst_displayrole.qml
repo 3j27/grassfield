@@ -157,6 +157,24 @@ TestCase {
         compare(entries[0].set.length, 2);
     }
 
+    // macOS: "Use as > Extended display" on the main display hands the role to another display (the owner's rc6 report: the main
+    // display's pop-up had nothing else to choose). The built-in panel takes it, else the first other display in the compositor's
+    // order; with no other display nothing changes.
+    function test_successorOfTheMainDisplay() {
+        compare(DisplayRole.successor([panel, desk], DisplayRole.identity(desk)), DisplayRole.identity(panel));
+        compare(DisplayRole.successor([desk, panel], DisplayRole.identity(desk)), DisplayRole.identity(panel));
+        compare(DisplayRole.successor([panel, desk], DisplayRole.identity(panel)), DisplayRole.identity(desk));
+        compare(DisplayRole.successor([desk, tv, panel], DisplayRole.identity(panel)), DisplayRole.identity(desk));
+        compare(DisplayRole.successor([desk, tv], DisplayRole.identity(desk)), DisplayRole.identity(tv));
+        compare(DisplayRole.successor([desk], DisplayRole.identity(desk)), "");
+        compare(DisplayRole.successor([], "s:x|y|z"), "");
+        // Twins keep their connector-bound keys.
+        compare(DisplayRole.successor([twinA, twinB], DisplayRole.identities([twinA, twinB])[0]), DisplayRole.identities([twinA, twinB])[1]);
+        // Written as the main of the set, it resolves to that display.
+        const entries = DisplayRole.withMain([], [panel, desk], DisplayRole.successor([panel, desk], DisplayRole.identity(panel)));
+        compare(DisplayRole.resolve(entries, [panel, desk]).name, "DP-2");
+    }
+
     function test_withMainRefusesAStrangerAndKeepsAtMostSixteen() {
         const before = DisplayRole.withMain([], [panel, desk], DisplayRole.identity(desk));
         compare(DisplayRole.withMain(before, [panel, desk], "s:Other|1"), before);

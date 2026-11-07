@@ -889,6 +889,22 @@ screen): NOT VERIFIED.
   `mouse_move_enables_dpms` (`looknfeel.lua`, Omarchy's values) let Hyprland itself wake the displays, so a shell that
   dies meanwhile cannot leave the screen dark. Off in the nested dev session unless `idle devDisplayOff <s>` sets it
   (`lock_privacy.sh display-off`). NOT VERIFIED on hardware (L2†).
+- A resume from sleep lights the lock screen (2026-11-07, the owner's rc6 report "waking from sleep is very slow"; macOS:
+  waking the computer lights its displays, and without input they go off again after the lock screen's delay). Hyprland
+  keeps the displays off across a suspend that started with them off (the automatic sleep always does) and the key that
+  woke the computer is usually not delivered as input, so they stayed dark until a second input. `IdleModel.RESUME_WAKE_MS`
+  (1.5 s, a monotonic Timer) after the sleep inhibitor's resume (`SleepInhibitor.resumed`, emitted at the end of
+  `afterResume`, after its lock decision), `Idle.wakeAfterResume` re-arms the lock screen's idle monitor and the unlocked one
+  (`rearmingLocked`, `rearmingInactive` for one event-loop turn): the displays come on (`updateDisplays`) and the 30 s
+  countdown starts over (`Idle.armAfterResume`, one turn later, arms both again: without it the lock screen's display-off
+  would stay disarmed for the session). Only when this module had turned the displays off, the session is locked and no new
+  sleep is under way (`IdleModel.wakeAtResume(displayOff, Lock.locked, SleepInhibitor.sleeping)`, read when the Timer fires;
+  exact values only; the Timer also stops when a sleep starts); display only: it never locks, unlocks, releases or delays a
+  lock, and an unlocked session is never lit by it. `resumed` is emitted last in `afterResume`. `tst_idlemodel.qml`
+  `test_wakeAtResume`, `test_resumeLightsTheLockScreenOnly`, `test_resumeArmsTheMonitorsAgain`,
+  `test_resumeTimerStopsWhenSleepStarts`, `test_resumedIsEmittedLast`; `lock_privacy.sh display-off` (nested): lit after the
+  resume, dark again 4 s later, kept dark by a sleep that starts before the wake. NOT VERIFIED on hardware (no suspend on the development laptop
+  since 2026-10-17; owner check in the report of the fix).
 - Display power-off while unlocked (2026-10-26, Settings > Lock Screen; ADR-0010 amendment of that date): a second
   `IdleMonitor` (`respectInhibitors: true`, armed only while unlocked and no ScreenSaver cookie is held,
   `IdleModel.inactiveOffArmed`) switches the displays off after `lock.displayOffBattery` / `lock.displayOffPower` minutes
@@ -1367,6 +1383,11 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   locked, the clock after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
 
 ## Known limitations
+- A display that is on without a mode (Hyprland lists it at 0x0 and draws nothing on it, so it reports only `WORKSPACE`
+  in `solitaryBlockedBy`) can delay the sleep-lock fallback's confirmation by about 12 s: the `omarchy-shell` stand-in's
+  `lock status` stays fail-closed and wants `LOCK` on every monitor (integrator decision 2026-11-07), so Omarchy's script
+  waits out its budget before the sleep, on the first sleep of a login while its unit still runs; the shell's own
+  recovery (`shell/platform/Displays.qml` `checkModeless`) gives the display its mode back within seconds to a minute.
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
 - L3 cannot be verified in nested.
 - VERIFIED 2026-10-17 (nested): polkit agents register per logind session. The nested shell shares the owner's

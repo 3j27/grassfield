@@ -247,7 +247,7 @@ Scope {
     // acquired: the displays never go dark over a session that is not locked yet.
     IdleMonitor {
         id: lockedMonitor
-        enabled: Lock.holding && root.displayOffSeconds > 0
+        enabled: Lock.holding && root.displayOffSeconds > 0 && !root.rearmingLocked
         timeout: Math.max(1, root.displayOffSeconds)
         respectInhibitors: false
         onIsIdleChanged: root.updateDisplays()
@@ -385,8 +385,52 @@ Scope {
         }
     }
 
+    // ---- A resume from sleep lights the lock screen (macOS: waking the computer lights its displays; without input they go off
+    // again after the lock screen's delay; the owner's rc6 report: "waking from sleep is very slow"). The displays stay
+    // off across a suspend that started with them off (Hyprland changes its DPMS state only on a dpms request or input; the
+    // automatic sleep always starts that way) and the key that woke the computer is
+    // usually not delivered as input: the displays stayed dark until a second input, and only then did each external display
+    // start to sync. Here the lock screen's display-off countdown starts over: its idle monitor (and the unlocked one) is
+    // re-armed, so the displays come on (updateDisplays) and go off again after displayOffSeconds without input. Display only:
+    // nothing here locks, unlocks, releases or delays a lock; only a locked session with the displays turned off by this module
+    // is lit, never while a new sleep is under way (IdleModel.wakeAtResume, read when the Timer fires; the Timer also stops when
+    // a sleep starts). ----
+    property bool rearmingLocked: false
+
+    function wakeAfterResume(): void {
+        if (!IdleModel.wakeAtResume(root.displayOff, Lock.locked, sleepInhibitor.sleeping))
+            return;
+        console.info("grassfield-idle: resumed with the displays off; lighting the lock screen");
+        root.rearmingInactive = true;
+        root.rearmingLocked = true;
+        Qt.callLater(root.armAfterResume);
+    }
+
+    // One event-loop turn after wakeAfterResume: both monitors armed again, so the lock screen's countdown runs from now (without
+    // this the lock screen's display-off would stay disarmed for the rest of the session: lit all night, no automatic sleep).
+    function armAfterResume(): void {
+        root.rearmingInactive = false;
+        root.rearmingLocked = false;
+    }
+
+    Timer {
+        id: resumeWake
+        interval: IdleModel.RESUME_WAKE_MS
+        onTriggered: root.wakeAfterResume()
+    }
+
+    // A sleep that starts before the wake was due: no wake from the previous resume (review of c94e3195).
+    Connections {
+        target: sleepInhibitor
+        function onSleepingChanged(): void {
+            if (sleepInhibitor.sleeping)
+                resumeWake.stop();
+        }
+    }
+
     SleepInhibitor {
         id: sleepInhibitor
+        onResumed: resumeWake.restart()
     }
 
     // Dim layer: no input region, so pointer motion reaches the compositor and counts as activity.
