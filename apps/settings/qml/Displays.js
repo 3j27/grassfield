@@ -70,20 +70,29 @@ function whole(v) {
     return Math.abs(v - Math.round(v)) < 0.01;
 }
 
+// The highest default scale of a panel that is not high density: such a panel always offers its native resolution (scale 1).
+var NATIVE_UP_TO_DEFAULT = 1.5;
+
 // The resolution choices of a monitor, largest text first: [{scale, width, height (logical), isDefault}]. The scales whose
 // logical size is whole and at least MIN_LOGICAL_WIDTH wide, within the span around the default; the default and the monitor's own
-// scale always in; at most MAX_CHOICES, the ends and the default kept, then the scales closest to the default.
+// scale always in, and the native resolution (scale 1) too on a panel that is not high density (default at most
+// NATIVE_UP_TO_DEFAULT: macOS's More Space on a display that is not Retina is its native resolution; the span alone stopped at
+// the default / MORE_SPACE_RATIO, 1.2 on a 15.6" 1080p panel, so 100 % could not be chosen there: the owner's rc6 report); at
+// most MAX_CHOICES, the ends, the default and the scale in use kept, then the scales closest to the default.
 function scaleChoices(m) {
     const def = defaultScale(m);
     const fits = s => whole(m.width / s) && whole(m.height / s) && Math.round(m.width / s) >= MIN_LOGICAL_WIDTH;
     let list = SCALES.filter(s => s >= 1 && s >= def / MORE_SPACE_RATIO - 1e-6 && s <= def * LARGER_TEXT_RATIO + 1e-6 && fits(s));
-    for (const s of [def, m.scale]) {
+    const always = def <= NATIVE_UP_TO_DEFAULT && fits(1) ? [def, m.scale, 1] : [def, m.scale];
+    for (const s of always) {
         if (!list.some(x => Math.abs(x - s) < 1e-3))
             list.push(s);
     }
     list.sort((a, b) => b - a);
     if (list.length > MAX_CHOICES) {
-        const keep = [list[0], list[list.length - 1], def, m.scale];
+        // The listed value of a scale (Hyprland reports 1.3333333 where the list has 1.333333).
+        const listed = s => list.find(x => Math.abs(x - s) < 1e-3) ?? s;
+        const keep = [list[0], list[list.length - 1], listed(def), listed(m.scale)];
         const rest = list.filter(s => keep.indexOf(s) < 0).sort((a, b) => Math.abs(a - def) - Math.abs(b - def));
         for (const s of rest) {
             if (keep.filter((v, i) => keep.indexOf(v) === i).length >= MAX_CHOICES)

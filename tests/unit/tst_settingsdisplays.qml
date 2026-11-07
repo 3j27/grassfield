@@ -490,6 +490,10 @@ TestCase {
         modes: [{w: 2880, h: 1800, hz: 120}, {w: 2880, h: 1800, hz: 60}, {w: 2880, h: 1800, hz: 59.94}, {w: 1920, h: 1200, hz: 60}, {w: 2880, h: 1800, hz: 120.001}]})
     readonly property var monitor24: ({name: "DP-1", description: "Dell Inc. DELL P2419H 4GHXRV2", width: 1920, height: 1080, physicalWidth: 530,
         physicalHeight: 300, refreshRate: 60, x: 1440, y: 0, scale: 1, transform: 0, modes: []})
+    // The owner's development laptop as Hyprland describes it (hyprctl monitors -j, 2026-11-07).
+    readonly property var ownerPanel: ({name: "eDP-1", description: "AU Optronics 0x2E8D", make: "AU Optronics", model: "0x2E8D", width: 1920,
+        height: 1080, physicalWidth: 340, physicalHeight: 190, refreshRate: 60.056, x: 0, y: 0, scale: 1.25, transform: 0,
+        modes: [{w: 1920, h: 1080, hz: 60.06}, {w: 1920, h: 1080, hz: 48.05}]})
 
     function test_parseState() {
         const text = JSON.stringify({v: 1, monitors: [
@@ -524,6 +528,30 @@ TestCase {
         compare(Displays.scaleChoices(monitor24).map(x => x.scale), [1.25, 1]);
         // Without a physical size: 1.
         compare(Displays.defaultScale(Object.assign({}, panel, {physicalWidth: 0})), 1);
+    }
+
+    // The owner's report (rc6, development laptop): a 15.6" 1920 x 1080 panel (144 ppi, Hyprland's default 1.5) kept at 1.25 by
+    // displays.conf, and 100 % could not be chosen: the span stopped at the default / 1.25 = 1.2. A panel that is not high density
+    // (default 1.5 or less) always offers its native resolution as More Space, as macOS does for a display that is not Retina.
+    function test_nativeResolutionOffered() {
+        compare(Displays.defaultScale(ownerPanel), 1.5);
+        const c = Displays.scaleChoices(ownerPanel);
+        verify(c.length <= Displays.MAX_CHOICES, JSON.stringify(c));
+        const last = c[c.length - 1];
+        compare(last.scale, 1);
+        compare(last.width + "x" + last.height, "1920x1080");
+        // The scale in use and the default stay offered.
+        verify(c.some(x => x.scale === 1.25));
+        compare(c.filter(x => x.isDefault).map(x => x.scale), [1.5]);
+        compare(Displays.currentChoice(c, 1.25), c.findIndex(x => x.scale === 1.25));
+        // The native choice is a trial line with scale 1, as displays.lua reads it.
+        compare(Displays.lineFor(ownerPanel, {scale: last.scale}), "v1\tdesc:AU Optronics 0x2E8D\t1920x1080@60.06\t0x0\t1\t0");
+        // At 100 % the panel still offers the same span (1.25 is kept as a choice in between).
+        const at1 = Displays.scaleChoices(Object.assign({}, ownerPanel, {scale: 1}));
+        compare(at1[at1.length - 1].scale, 1);
+        compare(Displays.currentChoice(at1, 1), at1.length - 1);
+        // A high-density panel (default 2) keeps macOS's span: no native resolution.
+        verify(!Displays.scaleChoices(panel).some(x => x.scale === 1));
     }
 
     function test_refreshRates() {
