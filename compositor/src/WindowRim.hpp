@@ -1,13 +1,16 @@
 #pragma once
 
+#include "hyprcompat.hpp"
+
 // The dark appearance's light inner rim (ADR-0024 note 2026-11-03; core/WindowRim.hpp holds the geometry and the rules):
 // a window decoration on Hyprland's OVER layer, so drawn right after the window's surface and under its popups, that adds
 // one ring of Hyprland's border shader (CBorderPassElement) inside the window's frame: its surface, and the plugin's
 // titlebar above it while that is shown. One per window, next to its titlebar (main.cpp decorate()); nothing reserved,
 // no input. Without the plugin there is no rim (gate C2); the unload removes every rim and damages where it was.
 
-#include <hyprland/src/desktop/view/Window.hpp>
+
 #include <hyprland/src/render/decorations/IHyprWindowDecoration.hpp>
+#include <hyprland/src/render/Context.hpp>
 
 #include <optional>
 #include <string>
@@ -22,7 +25,11 @@ class CGrassfieldRim : public IHyprWindowDecoration {
 
     SDecorationPositioningInfo getPositioningInfo() override;
     void                       onPositioningReply(const SDecorationPositioningReply& reply) override;
+#if GF_HYPRLAND_API_57
+    void                       draw(Render::CRenderContext& ctx, PHLMONITOR monitor, float const& alpha, const Render::SWindowRenderPresentation& presentation) override;
+#else
     void                       draw(PHLMONITOR monitor, float const& alpha) override;
+#endif
     eDecorationType            getDecorationType() override;
     void                       updateWindow(PHLWINDOW window) override;
     void                       damageEntire() override;

@@ -1,10 +1,11 @@
+#include "hyprcompat.hpp"
 #include "WindowTransform.hpp"
 
 #include "Plugin.hpp"
 #include "core/Overview.hpp"
 
-#include <hyprland/src/desktop/Workspace.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+
+
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/output/MonitorResources.hpp>
 #include <hyprland/src/render/Renderer.hpp>
@@ -28,8 +29,8 @@ namespace gf::transform {
     }
 
     Vector2D renderOffset(const PHLWINDOW& w) {
-        Vector2D off = w->m_floatingOffset;
-        if (!w->m_pinned && w->m_workspace && w->m_workspace->m_renderOffset)
+        Vector2D off = gf::floatingOffset(w);
+        if (!gf::pinned(w) && w->m_workspace && w->m_workspace->m_renderOffset)
             off = off + w->m_workspace->m_renderOffset->value();
         return off;
     }
@@ -42,6 +43,7 @@ namespace gf::transform {
         // Hyprland leaves the render damage at the window's own box once it has rendered the window into the work buffer
         // (CRenderPass::render stores its damage). Clears and draws here must cover the whole buffer: a work buffer keeps
         // the content of its previous use, and the composite samples all of it. The damage is restored afterwards.
+#if !GF_HYPRLAND_API_57
         class CWholeBufferDamage {
           public:
             explicit CWholeBufferDamage(const PHLMONITOR& mon) : m_saved(g_pHyprRenderer->m_renderData.damage.copy()) {
@@ -58,6 +60,7 @@ namespace gf::transform {
           private:
             CRegion m_saved;
         };
+#endif
     } // namespace
 
     Box fullBox(const PHLWINDOW& w) {
@@ -71,6 +74,7 @@ namespace gf::transform {
         return translated(gf::minimize::mapBox(fullBox(w), surface, gf::overview::drawBox(surface, rect)), renderOffset(w));
     }
 
+#if !GF_HYPRLAND_API_57
     bool monitorFrame() {
         return g_pHyprRenderer && !g_pHyprRenderer->m_bRenderingSnapshot && g_pHyprRenderer->m_renderData.projectionType == Render::RPT_MONITOR;
     }
@@ -130,5 +134,59 @@ namespace gf::transform {
         g_pHyprRenderer->draw(CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)});
         return in;
     }
+#endif
+
+#if GF_HYPRLAND_API_57
+    bool monitorFrame(const Render::CRenderContext& ctx) {
+        return !ctx.m_renderingSnapshot && ctx.m_data.projectionType == Render::RPT_MONITOR;
+    }
+
+    Render::SWindowTransformBuffer drawNothing(Render::CRenderContext& ctx, const Render::SWindowTransformBuffer& in) {
+        if (!in.framebuffer || !g_pHyprRenderer)
+            return in;
+        const auto mon = ctx.m_data.pMonitor.lock();
+        if (!mon)
+            return in;
+        CRegion damage = ctx.m_data.damage.copy();
+        const auto guard = g_pHyprRenderer->bindTempFB(ctx, in.framebuffer);
+        g_pHyprRenderer->draw(ctx, CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)}, damage);
+        return in;
+    }
+
+    Render::SWindowTransformBuffer drawFitted(Render::CRenderContext& ctx, const PHLWINDOW& w, const Box& rect,
+                                               const Render::SWindowTransformBuffer& in, bool& warnedNoBuffer, uint64_t address) {
+        if (!in.framebuffer || !w || !g_pHyprRenderer)
+            return in;
+        const auto mon = ctx.m_data.pMonitor.lock();
+        const auto tex = in.framebuffer->getTexture();
+        if (!mon || !tex)
+            return drawNothing(ctx, in);
+        const auto resources = mon->resources();
+        auto out = resources && !resources.expired() ? resources->getUnusedWorkBuffer() : nullptr;
+        if (!out) {
+            if (!warnedNoBuffer)
+                gf::log(Log::WARN, "window transform: no free work buffer; window {:x} not drawn this frame", address);
+            warnedNoBuffer = true;
+            return drawNothing(ctx, in);
+        }
+        const Box surface = surfaceBox(w);
+        const auto off = renderOffset(w);
+        const Box src = translated(surface, off);
+        const Box dst = translated(gf::overview::drawBox(surface, rect), off);
+        const gf::minimize::SSnapshotGeometry geometry{.visible = src, .monitorX = mon->m_position.x, .monitorY = mon->m_position.y,
+            .monitorScale = mon->m_scale, .texW = mon->m_transformedSize.x, .texH = mon->m_transformedSize.y};
+        const Box texBox = gf::minimize::textureBox(geometry, dst, mon->m_position.x, mon->m_position.y, mon->m_scale);
+        const auto save = ctx.saveDrawState();
+        const auto guard = g_pHyprRenderer->bindTempFB(ctx, out);
+        CRegion damage = ctx.m_data.damage.copy();
+        g_pHyprRenderer->draw(ctx, CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)}, damage);
+        CTexPassElement::SRenderData data;
+        data.tex = tex;
+        data.box = toCBox(texBox);
+        data.a = 1.F;
+        g_pHyprRenderer->draw(ctx, data, damage);
+        return Render::SWindowTransformBuffer{.framebuffer = out, .box = in.box, .success = true};
+    }
+#endif
 
 } // namespace gf::transform

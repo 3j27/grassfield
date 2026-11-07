@@ -31,6 +31,26 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland pixman-1 libdrm glesv2) # glesv2: the Genie draw (GenieDraw.cpp)
 pkg_check_modules(LUA REQUIRED lua) # headers only: symbols resolve from Hyprland's liblua at load time
 
+# Hyprland's API level, from the GIT_TAG of the version.h compiled against (v0.57.1 -> 57). Hyprland 0.57 split the desktop
+# state (the window is Desktop::View::CWindow in its own header, the workspace Workspace::CHLWorkspace, the hyprctl commands
+# became IPC::Socket1::SCommand, the socket2 events moved to IPC::Socket2, IPassElement and the transformer draw with a
+# Render::CRenderContext, the focus reason is a 32-bit enum). The wrapper sources keep both APIs side by side behind
+# GF_HYPRLAND_API_57 (src/hyprcompat.hpp): the same tree still builds against 0.56.2 (the release the packages build with)
+# and against 0.57.1 (the edge, aarch64 included). GF-033: never a runtime version check here — the ABI stamp keeps a build
+# on the Hyprland it was made for. As of the plugin's build order (gfprotocols and the plugin) the define must be on both.
+find_file(GF_HYPRLAND_VERSION_H_NOW NAMES hyprland/src/version.h HINTS ${HYPRLAND_INCLUDE_DIRS} REQUIRED)
+set(GF_HYPRLAND_API_57 0)
+if(EXISTS "${GF_HYPRLAND_VERSION_H_NOW}")
+  file(READ "${GF_HYPRLAND_VERSION_H_NOW}" gf_hypr_version_text)
+  string(REGEX MATCH "define[ \t]+GIT_TAG[ \t]+\"v?([0-9]+)\\.([0-9]+)" gf_hypr_tag "${gf_hypr_version_text}")
+  set(gf_hypr_major "${CMAKE_MATCH_1}")
+  set(gf_hypr_minor "${CMAKE_MATCH_2}")
+  if(gf_hypr_major STREQUAL "0" AND gf_hypr_minor GREATER_EQUAL 57)
+    set(GF_HYPRLAND_API_57 1)
+  endif()
+endif()
+message(STATUS "grassfield-compositor: Hyprland API 57 adaptation ${GF_HYPRLAND_API_57} (${GF_HYPRLAND_VERSION_H_NOW})")
+
 # Pure logic, no Hyprland includes (unit-testable).
 add_library(gfcore STATIC src/core/Protocol.cpp src/core/TitlebarLayout.cpp src/core/PointerGesture.cpp src/core/Minimize.cpp src/core/Appmenu.cpp
   src/core/EventThrottle.cpp src/core/Overview.cpp src/core/DesktopFocus.cpp src/core/Json.cpp src/core/Stages.cpp src/core/CursorRefresh.cpp
@@ -51,11 +71,13 @@ add_custom_command(
 add_library(gfprotocols OBJECT ${GF_PROTO_DIR}/appmenu.cpp)
 target_link_libraries(gfprotocols PRIVATE PkgConfig::HYPRLAND)
 set_target_properties(gfprotocols PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden)
+target_compile_definitions(gfprotocols PRIVATE GF_HYPRLAND_API_57=${GF_HYPRLAND_API_57})
 
 add_library(grassfield-compositor SHARED src/main.cpp src/Titlebar.cpp src/Ipc.cpp src/Minimize.cpp src/AppmenuServer.cpp src/Overview.cpp src/DesktopFocus.cpp src/Surfaces.cpp src/WindowTransform.cpp src/Stages.cpp src/CursorRefresh.cpp src/DeferredFocus.cpp src/OverviewFocus.cpp src/GenieDraw.cpp src/Tiling.cpp src/LayerPointer.cpp src/ClientChrome.cpp src/FrameProbe.cpp src/TopClamp.cpp src/WindowRim.cpp $<TARGET_OBJECTS:gfprotocols>)
 target_link_libraries(grassfield-compositor PRIVATE gfcore PkgConfig::HYPRLAND)
 target_include_directories(grassfield-compositor PRIVATE ${LUA_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(grassfield-compositor PRIVATE -Wall -Wextra)
+target_compile_definitions(grassfield-compositor PRIVATE GF_HYPRLAND_API_57=${GF_HYPRLAND_API_57})
 set_target_properties(grassfield-compositor PROPERTIES
   PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${GRASSFIELD_OUTPUT_DIR})

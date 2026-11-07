@@ -1,3 +1,4 @@
+#include "hyprcompat.hpp"
 #include "Ipc.hpp"
 
 #include "AppmenuServer.hpp"
@@ -11,6 +12,7 @@
 #include "Overview.hpp"
 #include "OverviewFocus.hpp"
 #include "Plugin.hpp"
+#include "hyprcompat.hpp"
 #include "Stages.hpp"
 #include "Tiling.hpp"
 #include "Titlebar.hpp"
@@ -23,7 +25,7 @@
 #include "core/FrameLog.hpp"
 #include "core/Stages.hpp"
 
-#include <hyprland/src/managers/EventManager.hpp>
+
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 
@@ -60,9 +62,7 @@ namespace gf::ipc {
         }
 
         void postNow(const std::string& json) {
-            if (!g_pEventManager)
-                return; // shutting down: nobody listens
-            g_pEventManager->postEvent(SHyprIPCEvent{.event = std::string{gfc::kEventName}, .data = json});
+            gf::postSocketEvent(std::string{gfc::kEventName}, json);
         }
 
         void postAll(const std::vector<std::string>& payloads) {
@@ -749,7 +749,7 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
-        std::string hyprctlGrassfield(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+        std::string hyprctlGrassfield(gf::HyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             // Same JSON for both output formats: the payload is already machine-readable.
             std::string out;
             // The reply (not the event) also names the plugin version, so About, pacman -Qi, the plugin and the bridge compare (GF-013).
@@ -760,7 +760,7 @@ namespace gf::ipc {
 
         // `hyprctl grassfield-frames`: the presented-frame timestamps of every monitor (ADR-0006 P3, core/FrameLog.hpp).
         // Read-only, no argument; the same JSON for both output formats.
-        std::string hyprctlFrames(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+        std::string hyprctlFrames(gf::HyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             std::string out;
             if (!guarded("hyprctl grassfield-frames", [&] { out = frameProbe::json(); }))
                 out = R"({"v":"gfc/1","type":"error"})";
@@ -769,7 +769,7 @@ namespace gf::ipc {
 
         // `hyprctl grassfield-frames-start`: the frames of the next 60 s are recorded (nothing is otherwise, never while the
         // session is locked); the measurement tools send it (tests/visual/presented-frames.sh).
-        std::string hyprctlFramesStart(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+        std::string hyprctlFramesStart(gf::HyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             std::string out;
             if (!guarded("hyprctl grassfield-frames-start", [&] { out = frameProbe::startRecording(); }))
                 out = R"({"v":"gfc/1","type":"error"})";
@@ -778,7 +778,7 @@ namespace gf::ipc {
 
         // `hyprctl grassfield-stages`: the Stages state of the latest `stages` notice (the event carries no state: Hyprland
         // cuts socket2 events at 1024 bytes). Read-only, no argument; the same JSON for both output formats.
-        std::string hyprctlStages(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+        std::string hyprctlStages(gf::HyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             std::string out;
             if (!guarded("hyprctl grassfield-stages", [&] { out = stager::stateReply(); }))
                 out = R"({"v":"gfc/1","type":"error"})";
@@ -787,7 +787,7 @@ namespace gf::ipc {
 
         // `hyprctl grassfield-tiling`: the tiled windows per output (the `tiling` event is a change notice only). Read-only,
         // no argument; the same JSON for both output formats.
-        std::string hyprctlTiling(eHyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
+        std::string hyprctlTiling(gf::HyprCtlOutputFormat /*format*/, const std::string& /*args*/) noexcept {
             std::string out;
             if (!guarded("hyprctl grassfield-tiling", [&] { out = tiler::stateReply(); }))
                 out = R"({"v":"gfc/1","type":"error"})";
@@ -836,30 +836,30 @@ namespace gf::ipc {
         s.luaWindowSizeRegistered    = addLua(gfc::kLuaWindowSize, luaWindowSize); // without it bindings.lua uses Hyprland's own
         bool ok                = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
-        s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
+        s.hyprctlCommand = gf::registerHyprCtl(s.handle, std::string{gfc::kHyprctlCommand}, hyprctlGrassfield);
         if (!s.hyprctlCommand) {
             log(Log::ERR, "registerHyprCtlCommand({}) failed", gfc::kHyprctlCommand);
             ok = false;
         }
         // Stages needs its state command: without it neither stages-available nor stages is advertised.
         if (stager::ready()) {
-            s.hyprctlStagesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlStagesCommand}, .exact = true, .fn = hyprctlStages});
+            s.hyprctlStagesCommand = gf::registerHyprCtl(s.handle, std::string{gfc::kHyprctlStagesCommand}, hyprctlStages);
             if (!s.hyprctlStagesCommand)
                 log(Log::WARN, "registerHyprCtlCommand({}) failed; Stages not advertised", gfc::kHyprctlStagesCommand);
         }
         // Tiling arrangements need the state command: without it tiling-arrange is not advertised (tile still works).
         if (tiler::ready()) {
-            s.hyprctlTilingCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlTilingCommand}, .exact = true, .fn = hyprctlTiling});
+            s.hyprctlTilingCommand = gf::registerHyprCtl(s.handle, std::string{gfc::kHyprctlTilingCommand}, hyprctlTiling);
             if (!s.hyprctlTilingCommand)
                 log(Log::WARN, "registerHyprCtlCommand({}) failed; tiling-arrange not advertised", gfc::kHyprctlTilingCommand);
         }
         // Optional: without it frame-times is not advertised, nothing else changes.
         if (frameProbe::ready()) {
-            s.hyprctlFramesCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlCommand}, .exact = true, .fn = hyprctlFrames});
+            s.hyprctlFramesCommand = gf::registerHyprCtl(s.handle, std::string{frames::kHyprctlCommand}, hyprctlFrames);
             if (!s.hyprctlFramesCommand)
                 log(Log::WARN, "registerHyprCtlCommand({}) failed; frame-times not advertised", frames::kHyprctlCommand);
             s.hyprctlFramesStartCommand =
-                HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{frames::kHyprctlStartCommand}, .exact = true, .fn = hyprctlFramesStart});
+                gf::registerHyprCtl(s.handle, std::string{frames::kHyprctlStartCommand}, hyprctlFramesStart);
             if (!s.hyprctlFramesStartCommand)
                 log(Log::WARN, "registerHyprCtlCommand({}) failed; frame-times not advertised", frames::kHyprctlStartCommand);
         }
@@ -887,23 +887,23 @@ namespace gf::ipc {
         removeLua(s.luaUnsplitRegistered, gfc::kLuaUnsplit);
         removeLua(s.luaWindowSizeRegistered, gfc::kLuaWindowSize);
         if (s.hyprctlCommand) {
-            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
+            gf::unregisterHyprCtl(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();
         }
         if (s.hyprctlStagesCommand) {
-            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlStagesCommand);
+            gf::unregisterHyprCtl(s.handle, s.hyprctlStagesCommand);
             s.hyprctlStagesCommand.reset();
         }
         if (s.hyprctlTilingCommand) {
-            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlTilingCommand);
+            gf::unregisterHyprCtl(s.handle, s.hyprctlTilingCommand);
             s.hyprctlTilingCommand.reset();
         }
         if (s.hyprctlFramesStartCommand) {
-            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesStartCommand);
+            gf::unregisterHyprCtl(s.handle, s.hyprctlFramesStartCommand);
             s.hyprctlFramesStartCommand.reset();
         }
         if (s.hyprctlFramesCommand) {
-            HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlFramesCommand);
+            gf::unregisterHyprCtl(s.handle, s.hyprctlFramesCommand);
             s.hyprctlFramesCommand.reset();
         }
     }

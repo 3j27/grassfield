@@ -1,3 +1,4 @@
+#include "hyprcompat.hpp"
 #include "DeferredFocus.hpp"
 
 #include "Surfaces.hpp"
@@ -6,7 +7,9 @@
 #include <hyprland/src/desktop/state/ViewHitTester.hpp>
 #include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/output/Monitor.hpp>
+
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -24,7 +27,7 @@ namespace gf::deferredFocus {
     }
 
     bool exclusiveLayerMapped() {
-        return g_pInputManager && !g_pInputManager->m_exclusiveLSes.empty();
+        return g_pInputManager && !gf::exclusiveLayers().empty();
     }
 
     bool windowFocusRefused() {
@@ -40,7 +43,7 @@ namespace gf::deferredFocus {
         if (stateReset)
             *stateReset = false;
         const auto fs = Desktop::focusState();
-        if (!fs || !w || !w->m_isMapped || windowFocusRefused())
+        if (!fs || !w || !gf::mapped(w) || windowFocusRefused())
             return false;
         if (windowHoldsKeyboard(w))
             return true;
@@ -61,9 +64,9 @@ namespace gf::deferredFocus {
         if (auto surface = gf::surfaces::keyboardFocus())
             return surface;
         if (g_pInputManager) {
-            for (const auto& ref : g_pInputManager->m_exclusiveLSes) {
+            for (const auto& ref : gf::exclusiveLayers()) {
                 const auto ls = ref.lock();
-                if (ls && ls->m_mapped && ls->resource())
+                if (ls && gf::mapped(ls) && ls->resource())
                     return ls->resource();
             }
         }
@@ -73,21 +76,43 @@ namespace gf::deferredFocus {
     bool cursorOnExclusiveLayer(const Vector2D& at) {
         if (!g_pInputManager || !Desktop::viewState())
             return false;
-        std::vector<PHLLSREF> exclusive = g_pInputManager->m_exclusiveLSes;
+        std::vector<PHLLSREF> exclusive = gf::exclusiveLayers();
         Vector2D              local;
         PHLLS                 found;
         const auto            tester = Desktop::viewState()->hitTest();
+#if GF_HYPRLAND_API_57
+        PHLMONITOR monitor;
+        if (State::monitorState())
+            for (const auto& candidate : State::monitorState()->monitors())
+                if (candidate && CBox{candidate->m_position, candidate->m_size}.containsPoint(at)) {
+                    monitor = candidate;
+                    break;
+                }
+        return tester.layerPopupSurfaceAt(at, monitor, &local, &found) || tester.layerSurfaceAt(at, &exclusive, &local, &found);
+#else
         return tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) || tester.layerSurfaceAt(at, &exclusive, &local, &found);
+#endif
     }
 
     PHLLS exclusiveLayerAt(const Vector2D& at) {
         if (!g_pInputManager || !Desktop::viewState())
             return nullptr;
-        std::vector<PHLLSREF> exclusive = g_pInputManager->m_exclusiveLSes;
+        std::vector<PHLLSREF> exclusive = gf::exclusiveLayers();
         Vector2D              local;
         PHLLS                 found;
         const auto            tester = Desktop::viewState()->hitTest();
+#if GF_HYPRLAND_API_57
+        PHLMONITOR monitor;
+        if (State::monitorState())
+            for (const auto& candidate : State::monitorState()->monitors())
+                if (candidate && CBox{candidate->m_position, candidate->m_size}.containsPoint(at)) {
+                    monitor = candidate;
+                    break;
+                }
+        if (tester.layerPopupSurfaceAt(at, monitor, &local, &found) && found)
+#else
         if (tester.layerPopupSurfaceAt(at, static_cast<const std::vector<PHLLSREF>*>(&exclusive), &local, &found) && found)
+#endif
             return found;
         found.reset();
         if (tester.layerSurfaceAt(at, &exclusive, &local, &found) && found)

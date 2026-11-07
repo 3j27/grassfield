@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hyprcompat.hpp"
+
 // Live window transforms shared by the overview and Stages (Hyprland 0.56.2 glue): a Render::IWindowTransformer receives a
 // monitor-sized work buffer with the window's main pass (surface, subsurfaces, decorations) at its real place; these
 // helpers draw that buffer so that the window's surface box lands on a layout rect (uniform scale, centred), live, without
@@ -11,6 +13,8 @@
 #include <hyprland/src/helpers/math/Math.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
+#include <hyprland/src/render/Context.hpp>
+#include <hyprland/src/render/transformer/Transformer.hpp>
 
 #include <cstdint>
 
@@ -37,6 +41,9 @@ namespace gf::transform {
     // The frame being rendered is a monitor frame (not a snapshot for a close / minimize animation, not a window capture):
     // only then is a window drawn transformed; snapshots and captures show it as it is.
     bool monitorFrame();
+#if GF_HYPRLAND_API_57
+    bool monitorFrame(const Render::CRenderContext& ctx);
+#endif
 
     // Draws `in` (the transformer's input) with the window's surface box fitted into `rect` on the monitor being rendered,
     // into a pooled work buffer, and returns it. Without a free work buffer the window is drawn as nothing this frame
@@ -47,5 +54,10 @@ namespace gf::transform {
 
     // Clears `in` (the bound work buffer): the window is drawn as nothing on the monitor being rendered.
     SP<Render::IFramebuffer> drawNothing(const SP<Render::IFramebuffer>& in);
+#if GF_HYPRLAND_API_57
+    Render::SWindowTransformBuffer drawFitted(Render::CRenderContext& ctx, const PHLWINDOW& w, const Box& rect,
+        const Render::SWindowTransformBuffer& in, bool& warnedNoBuffer, uint64_t address);
+    Render::SWindowTransformBuffer drawNothing(Render::CRenderContext& ctx, const Render::SWindowTransformBuffer& in);
+#endif
 
 } // namespace gf::transform

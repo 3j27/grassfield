@@ -18,6 +18,16 @@ If Hyprland or Quickshell changed: rebuild the plugin and run the C2 degradation
 | Kernel | 7.2.5-3-omarchy | 2026-10-17 | `uname -r` |
 | grassfield-compositor built for | Hyprland 0.56.2 (ABI efb50993…_aq_0.15_hu_0.14_hg_0.5_hc_0.1_hlg_0.6), via `compositor/build-direct.sh` | 2026-10-17 | plugin log "ABI hash match" in nested |
 
+### Hyprland 0.57.1 compositor port (experimental)
+
+The compositor compatibility layer (`compositor/src/hyprcompat.hpp`) now compiles and links against the installed Hyprland
+0.57.1 headers, while retaining a 0.56.2 branch selected at build time from Hyprland's `version.h`. The 0.57.1 build and
+the compositor's pure-logic unit suite passed on 2026-11-07. This is compile/test-suite validation only: no live compositor
+session was run, and 0.56.2 headers were not available here for a second build. In particular, 0.57.1 no longer exposes the
+backend-owned XDG toplevel request hooks to plugins, so Grassfield's client-chrome interception of client minimize/maximize
+requests is inactive on that API level; native Hyprland behavior is left in place. Do not treat the 0.57.1 port or aarch64
+as production-verified until live-session testing and a 0.56.2 build have been completed.
+
 ## Known upstream issues (observed, not caused by Grassfield)
 | Component | Issue | Evidence | Impact / mitigation |
 |---|---|---|---|

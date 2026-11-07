@@ -1,3 +1,4 @@
+#include "hyprcompat.hpp"
 #include "Overview.hpp"
 
 #include "FrameProbe.hpp"
@@ -8,12 +9,12 @@
 #include "core/EventThrottle.hpp"
 #include "core/Minimize.hpp"
 
-#include <hyprland/src/desktop/Workspace.hpp>
+
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
@@ -44,14 +45,23 @@ namespace {
     // a monitor-sized work buffer holding the window's main pass at its real place; it returns the buffer to composite.
     class COverviewTransformer final : public Render::IWindowTransformer {
       public:
+#if GF_HYPRLAND_API_57
+        Render::SWindowTransformBuffer transform(Render::CRenderContext& ctx, const Render::SWindowTransformBuffer& in,
+                                                  const Render::SWindowTransformContext& context) override;
+        bool active() const override { return m_active; }
+        void deactivate() { m_active = false; }
+      private:
+        bool m_active = true;
+#else
         SP<Render::IFramebuffer> transform(SP<Render::IFramebuffer> in) override;
+#endif
     };
 
     struct SEntry {
         PHLWINDOWREF          window;
         uint64_t              address = 0;
         PHLMONITORREF         monitor;               // the window's monitor when it entered the overview
-        COverviewTransformer* transformer = nullptr; // owned by window->m_transformers; compared, never freed here
+        COverviewTransformer* transformer = nullptr; // owned by the window's transformer list; compared, never freed here
         std::optional<ov::Box> from;                 // nullopt: the window's live surface box
         std::optional<ov::Box> to;                   // nullopt: the window's live surface box
         ov::Box               rect;                  // layout rect the surface box is fitted into, at the last tick
@@ -108,11 +118,11 @@ namespace {
     // pinned (pinned windows are drawn on every workspace), not on a special workspace (minimized windows live on
     // special:minimized), not full screen and not on a workspace that shows a full-screen window (maximized is fine).
     bool eligible(const PHLWINDOW& w) {
-        if (!w || !w->m_isMapped || w->isHidden() || w->m_pinned)
+        if (!w || !gf::mapped(w) || w->isHidden() || gf::pinned(w))
             return false;
         const auto ws  = w->m_workspace;
         const auto mon = w->m_monitor.lock();
-        if (!ws || ws->m_isSpecialWorkspace || !mon || mon->m_activeWorkspace != ws)
+        if (!ws || gf::special(ws) || !mon || mon->m_activeWorkspace != ws)
             return false;
         const auto& fullscreen = Fullscreen::controller();
         return fullscreen && fullscreen->getFullscreenModes(w).internal != Fullscreen::FSMODE_FULLSCREEN && !showsFullscreen(ws);
@@ -140,7 +150,7 @@ namespace {
             if (!isChrome(ls))
                 continue;
             out.push_back(ov::ChromeSurface{.monitor   = monitorId(ls->m_monitor.lock()),
-                                            .mapped    = ls->m_mapped,
+                                            .mapped    = gf::mapped(ls),
                                             .exclusive = gf::surfaces::interactivity(ls) == 1 /* ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE */,
                                             .keyboard  = keyboardLayer == ls});
         }
@@ -179,12 +189,16 @@ namespace {
     }
 
     COverviewTransformer* attach(const PHLWINDOW& w) {
+#if GF_HYPRLAND_API_57
+        return w->effects().transformers()->emplace<COverviewTransformer>();
+#else
         auto  transformer = makeUnique<COverviewTransformer>();
         auto* raw         = transformer.get();
         w->m_transformers.emplace_back(std::move(transformer));
         if (g_pHyprRenderer)
             g_pHyprRenderer->damageWindow(w);
         return raw;
+#endif
     }
 
     // Back to normal rendering: the transformer leaves the window (a destroyed window took it along).
@@ -193,7 +207,12 @@ namespace {
             g_pHyprRenderer->damageBox(toCBox(e.damaged));
         const auto w = e.window.lock();
         if (w && e.transformer) {
+#if GF_HYPRLAND_API_57
+            e.transformer->deactivate();
+            w->effects().transformers()->removeInactive();
+#else
             std::erase_if(w->m_transformers, [&e](const UP<Render::IWindowTransformer>& t) { return t.get() == e.transformer; });
+#endif
             if (g_pHyprRenderer)
                 g_pHyprRenderer->damageWindow(w);
         }
@@ -385,6 +404,23 @@ namespace {
         post(s.phase, s.entries.size(), ov::Reason::Fullscreen);
     }
 
+#if GF_HYPRLAND_API_57
+    Render::SWindowTransformBuffer drawTransformed(const COverviewTransformer* self, Render::CRenderContext& ctx,
+                                                    const Render::SWindowTransformBuffer& in) {
+        if (!in.framebuffer || !gf::transform::monitorFrame(ctx))
+            return in;
+        const auto it = std::ranges::find_if(st().entries, [self](const SEntry& e) { return e.transformer == self; });
+        if (it == st().entries.end())
+            return in;
+        const auto w = it->window.lock();
+        const auto mon = ctx.m_data.pMonitor.lock();
+        if (!w || !mon)
+            return in;
+        if (mon != it->monitor.lock())
+            return gf::transform::drawNothing(ctx, in);
+        return gf::transform::drawFitted(ctx, w, it->rect, in, st().warnedNoBuffer, it->address);
+    }
+#else
     SP<Render::IFramebuffer> drawTransformed(const COverviewTransformer* self, const SP<Render::IFramebuffer>& in) {
         // Only the monitor frame: snapshots (close and minimize animations) and window captures (toplevel export,
         // RPT_EXPORT) show the window as it is.
@@ -403,12 +439,22 @@ namespace {
             return gf::transform::drawNothing(in);
         return gf::transform::drawFitted(w, it->rect, in, st().warnedNoBuffer, it->address);
     }
+#endif
 
+#if GF_HYPRLAND_API_57
+    Render::SWindowTransformBuffer COverviewTransformer::transform(Render::CRenderContext& ctx, const Render::SWindowTransformBuffer& in,
+                                                                     const Render::SWindowTransformContext&) {
+        auto out = in;
+        gf::guarded("overview transform", [&] { out = drawTransformed(this, ctx, in); });
+        return out;
+    }
+#else
     SP<Render::IFramebuffer> COverviewTransformer::transform(SP<Render::IFramebuffer> in) {
         SP<Render::IFramebuffer> out = in;
         gf::guarded("overview transform", [&] { out = drawTransformed(this, in); });
         return out;
     }
+#endif
 } // namespace
 
 namespace gf::overviewer {
@@ -442,7 +488,7 @@ namespace gf::overviewer {
             gf::guarded("overview window.active", [&] {
                 if (!w || !animatingOrOpen())
                     return;
-                const bool ends = w->m_isMapped && !keyboardOnChrome() && ov::focusEndsOverview(causeOf(reason));
+                const bool ends = gf::mapped(w) && !keyboardOnChrome() && ov::focusEndsOverview(causeOf(reason));
                 gf::logRequest(Log::DEBUG, "overview: window {:x} focused (reason {}): {}", reinterpret_cast<uintptr_t>(w.get()), static_cast<int>(reason),
                                ends ? "the overview ends" : "the overview stays");
                 if (ends)

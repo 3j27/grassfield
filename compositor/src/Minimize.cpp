@@ -1,3 +1,4 @@
+#include "hyprcompat.hpp"
 #include "Minimize.hpp"
 
 #include "ClientChrome.hpp"
@@ -9,10 +10,10 @@
 #include "core/Theme.hpp"
 
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
-#include <hyprland/src/desktop/Workspace.hpp>
+
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/MiscFunctions.hpp>
@@ -150,7 +151,7 @@ namespace {
     }
 
     bool onMinimizedWorkspace(const PHLWINDOW& w) {
-        return w->m_workspace && w->m_workspace->m_isSpecialWorkspace && w->m_workspace->m_name == MINIMIZED_WORKSPACE;
+        return w->m_workspace && gf::special(w->m_workspace) && gf::workspaceName(w->m_workspace) == MINIMIZED_WORKSPACE;
     }
 
     // Surface box plus the reserved decoration extents (titlebar, border): what the user sees as the window.
@@ -241,7 +242,7 @@ namespace {
 
     // The window, transparent while its restore animation runs, becomes visible again.
     void showWindow(const PHLWINDOW& w) {
-        auto& fadeIn = w->alpha(Desktop::View::WINDOW_ALPHA_MOVE_FROM_WORKSPACE);
+        auto& fadeIn = gf::windowAlpha(w, Desktop::View::WINDOW_ALPHA_MOVE_FROM_WORKSPACE);
         if (fadeIn)
             fadeIn->setValueAndWarp(1.F);
         if (g_pHyprRenderer)
@@ -401,7 +402,7 @@ namespace {
         const auto now = Time::steadyNow();
         for (auto it = all.begin(); it != all.end();) {
             const auto w = it->window.lock();
-            if (!w || !w->m_isMapped) {
+            if (!w || !gf::mapped(w)) {
                 if (g_pHyprRenderer && it->damaged.w > 0)
                     g_pHyprRenderer->damageBox(toCBox(it->damaged));
                 releaseSnapshot(it->snapshot);
@@ -440,7 +441,12 @@ namespace {
 
     // Shift held on any keyboard (macOS: Shift-click plays the minimize in slow motion).
     bool shiftHeld() {
-        return g_pInputManager && (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_SHIFT) != 0;
+        return g_pInputManager &&
+#if GF_HYPRLAND_API_57
+               static_cast<bool>(g_pInputManager->getModsFromAllKBs() & Input::HL_MODIFIER_SHIFT);
+#else
+               (g_pInputManager->getModsFromAllKBs() & HL_MODIFIER_SHIFT) != 0;
+#endif
     }
 
     // `elapsedMs`: where the animation starts, in animation time (an interrupted Genie continues from the shape on
@@ -458,7 +464,11 @@ namespace {
     // The Genie mesh of `a` on the monitor being rendered: positions in its pixels, texture coordinates in the snapshot.
     // With Hyprland's box projection the snapshot texture is sampled top-down (t = 0 at the monitor's top edge;
     // measured in nested: 1 - t drew the window upside down).
-    void drawGenie(const SAnimation& a, const SP<Render::ITexture>& tex, const PHLMONITOR& mon) {
+    void drawGenie(
+#if GF_HYPRLAND_API_57
+        Render::CRenderContext& ctx,
+#endif
+        const SAnimation& a, const SP<Render::ITexture>& tex, const PHLMONITOR& mon) {
         if (a.mesh.empty())
             return;
         const auto&          g     = a.geometry;
@@ -483,17 +493,29 @@ namespace {
         if (data.pixelBounds.w < 1 || data.pixelBounds.h < 1)
             return;
         ++st().genieAdded;
+#if GF_HYPRLAND_API_57
+        Render::IHyprRenderer::addPassElement(ctx, makeUnique<gf::genie::CGenieElement>(std::move(data)));
+#else
         g_pHyprRenderer->addPassElement(makeUnique<gf::genie::CGenieElement>(std::move(data)));
+#endif
     }
 
     // Draws every animation that touches the monitor being rendered. RENDER_POST_WINDOWS: after the windows,
     // before the top layers (menu bar, Dock); not emitted while the session is locked (no window content on
     // the lock screen).
-    void draw() {
+    void draw(
+#if GF_HYPRLAND_API_57
+        Render::CRenderContext& ctx
+#endif
+    ) {
         auto& all = st().animations;
         if (all.empty() || !g_pHyprRenderer)
             return;
+#if GF_HYPRLAND_API_57
+        const auto mon = ctx.m_data.pMonitor.lock();
+#else
         const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
+#endif
         if (!mon)
             return;
         const mz::Box monBox{mon->m_position.x, mon->m_position.y, mon->m_size.x, mon->m_size.y};
@@ -507,7 +529,11 @@ namespace {
             if (!mz::intersects(visual, monBox))
                 continue;
             if (a.effect == mz::Effect::Genie) {
-                drawGenie(a, tex, mon);
+                drawGenie(
+#if GF_HYPRLAND_API_57
+                    ctx,
+#endif
+                    a, tex, mon);
                 continue;
             }
             const mz::Box texBox = mz::textureBox(a.geometry, a.frame.box, mon->m_position.x, mon->m_position.y, mon->m_scale);
@@ -516,23 +542,41 @@ namespace {
             data.tex          = tex;
             data.box          = toCBox(texBox);
             data.a            = a.frame.alpha;
+#if !GF_HYPRLAND_API_57
             data.flipEndFrame = true; // framebuffer texture, as Hyprland draws its fadeouts
+#endif
             data.clipBox      = toCBox(visual).translate(-mon->m_position).scale(mon->m_scale).round();
+#if GF_HYPRLAND_API_57
+            Render::IHyprRenderer::addPassElement(ctx, makeUnique<CTexPassElement>(std::move(data)));
+#else
             g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(std::move(data)));
+#endif
         }
     }
 
     PHLWORKSPACE minimizedWorkspace() {
+#if GF_HYPRLAND_API_57
+        const State::Workspace::STarget target{.id = Workspace::SWorkspaceSpecialID{}, .address = "special:minimized", .displayName = "minimized",
+                                               .type = Workspace::eWorkspaceType::SPECIAL};
+        auto ws = State::workspaceState() ? State::workspaceState()->find(target) : nullptr;
+        if (!ws && State::workspaceState()) {
+            const auto mon = Desktop::focusState() ? Desktop::focusState()->monitor() : nullptr;
+            if (mon)
+                ws = State::workspaceState()->create(target, mon, false);
+        }
+        return ws;
+#else
         const auto [id, name, isAutoID] = getWorkspaceIDNameFromString(std::string{MINIMIZED_WORKSPACE});
         if (id == WORKSPACE_INVALID)
             return nullptr;
-        auto ws = State::workspaceState()->query().id(id).run();
+        auto ws = gf::findWorkspace(id);
         if (!ws) {
             const auto mon = Desktop::focusState()->monitor();
             if (mon)
                 ws = State::workspaceState()->create(id, mon->m_id, name, false);
         }
         return ws;
+#endif
     }
 
     // Moves the window to special:minimized without following it. Hyprland fades a window out in place when it
@@ -547,7 +591,7 @@ namespace {
             gf::log(Log::WARN, "minimize: move to {} failed: {}", MINIMIZED_WORKSPACE, result.error().message);
             return false;
         }
-        if (auto& fadeOut = w->alpha(Desktop::View::WINDOW_ALPHA_MOVE_TO_WORKSPACE); fadeOut && fadeOut->isBeingAnimated())
+        if (auto& fadeOut = gf::windowAlpha(w, Desktop::View::WINDOW_ALPHA_MOVE_TO_WORKSPACE); fadeOut && fadeOut->isBeingAnimated())
             fadeOut->warp();
         return onMinimizedWorkspace(w);
     }
@@ -620,7 +664,7 @@ namespace {
 
     // A floating window that is not full screen or zoomed: its frame is its own (what tiler::placeable checks too).
     bool keepsFrame(const PHLWINDOW& w) {
-        if (!w->m_isFloating || w->m_pinned || !w->layoutTarget())
+        if (!gf::floating(w) || gf::pinned(w) || !w->layoutTarget())
             return false;
         const auto& fs = Fullscreen::controller();
         return !fs || fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_NONE;
@@ -731,10 +775,17 @@ namespace gf::minimizer {
                 tick();
             });
         }));
-        l.push_back(ev.render.stage.listen([](eRenderStage stage) {
-            if (stage == RENDER_POST_WINDOWS)
-                gf::guarded("minimize draw", [] { draw(); });
-            else if (stage == RENDER_POST)
+        l.push_back(ev.render.stage.listen([](const Event::SRenderStageEvent& event) {
+            if (event.stage == RENDER_POST_WINDOWS)
+                gf::guarded("minimize draw", [&] {
+#if GF_HYPRLAND_API_57
+                    if (event.context)
+                        draw(event.context->get());
+#else
+                    draw();
+#endif
+                });
+            else if (event.stage == RENDER_POST)
                 gf::guarded("minimize frame timing", [] { frameEnded(); });
         }));
         l.push_back(ev.window.close.listen([](const PHLWINDOW& w) {
@@ -747,7 +798,7 @@ namespace gf::minimizer {
         // drops its recorded place: a later restore must not use a stale one.
         l.push_back(ev.window.moveToWorkspace.listen([](const PHLWINDOW& w, const PHLWORKSPACE& ws) {
             gf::guarded("minimize window.moveToWorkspace", [&] {
-                if (w && !(ws && ws->m_isSpecialWorkspace && ws->m_name == MINIMIZED_WORKSPACE))
+                if (w && !(ws && gf::special(ws) && gf::workspaceName(ws) == MINIMIZED_WORKSPACE))
                     forgetPlace(w);
             });
         }));
@@ -774,11 +825,13 @@ namespace gf::minimizer {
         // Funnel elements still queued in a render pass would be destroyed (and drawn) after dlclose with their vtable gone:
         // remove them (CRenderPass::removeAllOfType compares IPassElement::passName). Unload never runs inside a frame, so
         // the pass is normally empty; this covers a frame that queued them and did not render them.
+#if !GF_HYPRLAND_API_57
         if (g_pHyprRenderer) {
             g_pHyprRenderer->m_renderPass.removeAllOfType(gf::genie::kPassName);
             if (auto& current = g_pHyprRenderer->currentPass(); &current != &g_pHyprRenderer->m_renderPass)
                 current.removeAllOfType(gf::genie::kPassName);
         }
+#endif
         completeAll(false); // the recorded places stay (plain data and Hyprland's weak references): see start()
         if (s.watchdog) {
             if (g_pEventLoopManager)
@@ -809,7 +862,7 @@ namespace gf::minimizer {
 
     void minimize(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
-        if (!w || !w->m_isMapped) {
+        if (!w || !gf::mapped(w)) {
             gf::logRequest(Log::WARN, "minimize: no mapped window {:x}", address);
             return;
         }
@@ -872,7 +925,7 @@ namespace gf::minimizer {
         const auto&           all = st().places;
         for (auto it = all.rbegin(); it != all.rend(); ++it) {
             const auto w = it->window.lock();
-            if (w && w->m_isMapped && onMinimizedWorkspace(w) && it->place.monitor == monitor)
+            if (w && gf::mapped(w) && onMinimizedWorkspace(w) && it->place.monitor == monitor)
                 out.push_back(reinterpret_cast<uintptr_t>(w.get()));
         }
         return out;
@@ -880,7 +933,7 @@ namespace gf::minimizer {
 
     void restore(uint64_t address, std::optional<mz::Box> target) {
         const auto w = windowByAddress(address);
-        if (!w || !w->m_isMapped) {
+        if (!w || !gf::mapped(w)) {
             gf::logRequest(Log::WARN, "restore: no mapped window {:x}", address);
             return;
         }
@@ -906,19 +959,19 @@ namespace gf::minimizer {
             return;
         }
         if (const auto result = Config::Actions::moveToWorkspace(ws, true, w); !result || onMinimizedWorkspace(w)) {
-            gf::log(Log::WARN, "restore: move of {:x} to workspace {} failed", address, ws->m_name);
+            gf::log(Log::WARN, "restore: move of {:x} to workspace {} failed", address, gf::workspaceName(ws));
             return;
         }
         if (place.frame && keepsFrame(w) && g_layoutManager)
             g_layoutManager->setTargetGeom(toCBox(*place.frame), w->layoutTarget());
-        gf::logRequest(Log::INFO, "restore {:x}: on {} (Desktop {}){}", address, place.monitor->m_name, ws->m_name,
+        gf::logRequest(Log::INFO, "restore {:x}: on {} (Desktop {}){}", address, place.monitor->m_name, gf::workspaceName(ws),
                        !saved ? ", no recorded place: the focused display" : place.moved ? ", its display is gone: the focused display" : "");
 
         // Hyprland fades a window in when it arrives on a visible workspace and may move it there with an
         // animation: settle both so the snapshot shows the window at its place, fully opaque.
         w->positionAnimation()->warp();
         w->sizeAnimation()->warp();
-        auto& fadeIn = w->alpha(Desktop::View::WINDOW_ALPHA_MOVE_FROM_WORKSPACE);
+        auto& fadeIn = gf::windowAlpha(w, Desktop::View::WINDOW_ALPHA_MOVE_FROM_WORKSPACE);
         if (fadeIn && fadeIn->isBeingAnimated())
             fadeIn->warp();
 

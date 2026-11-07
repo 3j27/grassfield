@@ -7,6 +7,7 @@
 #include "core/Quiet.hpp"
 #include "core/Theme.hpp"
 #include "core/Tiling.hpp"
+#include "hyprcompat.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
@@ -40,11 +41,11 @@ namespace gf {
         bool                               active = false; // true once hooks are registered (not on a hash mismatch)
 
         std::vector<CHyprSignalListener>   listeners;
-        SP<SHyprCtlCommand>                hyprctlCommand;
-        SP<SHyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
-        SP<SHyprCtlCommand>                hyprctlFramesStartCommand; // `hyprctl grassfield-frames-start` (records for 60 s)
-        SP<SHyprCtlCommand>                hyprctlStagesCommand; // `hyprctl grassfield-stages` (the Stages state; stages-available needs it)
-        SP<SHyprCtlCommand>                hyprctlTilingCommand; // `hyprctl grassfield-tiling` (the tiling state; tiling-arrange needs it)
+        SP<HyprCtlCommand>                hyprctlCommand;
+        SP<HyprCtlCommand>                hyprctlFramesCommand; // `hyprctl grassfield-frames` (FrameProbe, feature frame-times)
+        SP<HyprCtlCommand>                hyprctlFramesStartCommand; // `hyprctl grassfield-frames-start` (records for 60 s)
+        SP<HyprCtlCommand>                hyprctlStagesCommand; // `hyprctl grassfield-stages` (the Stages state; stages-available needs it)
+        SP<HyprCtlCommand>                hyprctlTilingCommand; // `hyprctl grassfield-tiling` (the tiling state; tiling-arrange needs it)
         bool                               luaHelloRegistered    = false;
         bool                               luaMinimizeRegistered = false;
         bool                               luaRestoreRegistered  = false;

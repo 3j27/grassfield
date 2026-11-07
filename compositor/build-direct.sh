@@ -62,7 +62,14 @@ plugin_flags=()
 plugin_libs=()
 if [[ $what == plugin || $what == all || $what == compdb || $what == tidy ]]; then
   # shellcheck disable=SC2207
-  plugin_flags=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <../VERSION)\"" -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
+  # Hyprland's API split hidden behind GF_HYPRLAND_API_57 (src/hyprcompat.hpp): the same value as the CMake build's
+  # (compositor/CMakeLists.txt reads the version.h it compiles against; here the version.h of pkg-config's hyprland).
+  gf_vh=$(pkg-config --variable=includedir hyprland 2>/dev/null)/hyprland/src/version.h
+  gf_api57=0
+  if [[ -r $gf_vh ]] && grep -Eq 'define[[:space:]]+GIT_TAG[[:space:]]+"v?0\.(5[7-9]|[6-9][0-9]|[0-9]{3})' "$gf_vh"; then
+    gf_api57=1
+  fi
+  plugin_flags=("-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <../VERSION)\"" "-DGF_HYPRLAND_API_57=$gf_api57" -std=c++23 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Ibuild $(pkg-config --cflags hyprland pixman-1 libdrm glesv2) $(pkg-config --cflags lua))
   # shellcheck disable=SC2207
   plugin_libs=($(pkg-config --libs hyprland pixman-1 libdrm glesv2))
 fi

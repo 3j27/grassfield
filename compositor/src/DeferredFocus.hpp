@@ -18,7 +18,11 @@
 
 class CWLSurfaceResource;
 namespace Desktop {
+#if GF_HYPRLAND_API_57
+    enum eFocusReason : uint32_t;
+#else
     enum eFocusReason : uint8_t;
+#endif
 }
 
 namespace gf::deferredFocus {

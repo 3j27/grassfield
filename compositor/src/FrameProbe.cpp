@@ -207,8 +207,8 @@ namespace gf::frameProbe {
         s.listeners.push_back(ev.destroyMon.listen([](const PHLMONITOR& m) { guarded("frame probe monitor.destroy", [&] { detach(m); }); }));
         auto& render = bus->m_events.render;
         s.listeners.push_back(render.preChecks.listen([](const PHLMONITOR& m) { guarded("frame probe render begin", [&] { renderBegins(m); }); }));
-        s.listeners.push_back(render.stage.listen([](eRenderStage stage) {
-            if (stage == RENDER_POST)
+        s.listeners.push_back(render.stage.listen([](const Event::SRenderStageEvent& event) {
+            if (event.stage == RENDER_POST)
                 guarded("frame probe render end", [] { renderEnds(); });
         }));
         if (State::monitorState()) {

@@ -1,3 +1,4 @@
+#include "hyprcompat.hpp"
 #include "ClientChrome.hpp"
 
 #include "Ipc.hpp"
@@ -5,9 +6,9 @@
 #include "Tiling.hpp"
 #include "core/ClientChrome.hpp"
 
-#include <hyprland/src/desktop/Workspace.hpp>
+
 #include <hyprland/src/desktop/state/WindowState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/supplementary/DragController.hpp>
@@ -67,10 +68,14 @@ namespace gf::chrome {
         }
 
         SP<CXDGToplevelResource> toplevelOf(const PHLWINDOW& w) {
-            if (!w || w->m_isX11)
+            if (!w || gf::x11(w))
                 return nullptr;
+#if GF_HYPRLAND_API_57
+            return nullptr; // Hyprland 0.57 does not expose the backend-owned toplevel resource to plugins.
+#else
             const auto xdg = w->m_xdgSurface.lock();
             return xdg ? xdg->m_toplevel.lock() : nullptr;
+#endif
         }
 
         SWatch* watchOf(const PHLWINDOW& w) {
@@ -90,6 +95,10 @@ namespace gf::chrome {
             const auto w = e.window.lock();
             if (!w)
                 return;
+#if GF_HYPRLAND_API_57
+            (void)own;
+            e.suppressAdded = false;
+#else
             const bool suppressed = (w->m_suppressedEvents & Desktop::View::SUPPRESS_MAXIMIZE) != 0;
             if (own && !suppressed) {
                 w->m_suppressedEvents |= Desktop::View::SUPPRESS_MAXIMIZE;
@@ -101,6 +110,7 @@ namespace gf::chrome {
                 e.suppressAdded = false;
                 logRequest(Log::DEBUG, "client chrome: {:x} maximize requests are Hyprland's again", addressOf(w));
             }
+#endif
         }
 
         bool ownsMaximizeOf(const PHLWINDOW& w) {
@@ -113,6 +123,10 @@ namespace gf::chrome {
         // full screen for the maximized mode); the echo a client may send right after leaving full screen is swallowed, as
         // Hyprland does (core maximizeEcho).
         void onMaximizeRequest(const PHLWINDOW& w) {
+#if GF_HYPRLAND_API_57
+            (void)w;
+            return;
+#else
             SWatch* e = watchOf(w);
             if (!e || !e->suppressAdded || (w->m_suppressedEvents & Desktop::View::SUPPRESS_MAXIMIZE) == 0)
                 return; // Hyprland handled it as before
@@ -126,6 +140,7 @@ namespace gf::chrome {
                 return;
             }
             logRequest(Log::DEBUG, "client chrome: {:x} asks to zoom: {}", addressOf(w), tiling::nameOf(gf::tiler::zoom(w, true)));
+#endif
         }
 
         // The full-screen state of a watched window, for the echo above.
@@ -142,18 +157,24 @@ namespace gf::chrome {
         // P5: the app asked to be minimized (xdg_toplevel.set_minimized; Hyprland does nothing with it on its own, spike
         // step 5): the minimize path of the titlebar's own light. D78: its maximize request is the plugin's zoom.
         void onStateChanged(const PHLWINDOWREF& ref, const WP<CXDGToplevelResource>& weakTop) {
+#if GF_HYPRLAND_API_57
+            (void)ref;
+            (void)weakTop;
+            return;
+#else
             const auto w   = ref.lock();
             const auto top = weakTop.lock();
-            if (!w || !top || !w->m_isMapped || !isClientChrome(w))
+            if (!w || !top || !gf::mapped(w) || !isClientChrome(w))
                 return;
             if (top->m_state.requestsMaximize.has_value())
                 onMaximizeRequest(w);
             if (!top->m_state.requestsMinimize.value_or(false))
                 return;
-            if (w->m_workspace && w->m_workspace->m_isSpecialWorkspace)
+            if (w->m_workspace && gf::special(w->m_workspace))
                 return; // already parked (special:minimized or a scratchpad): nothing to do
             logRequest(Log::DEBUG, "client chrome: {:x} asks to be minimized", addressOf(w));
             ipc::postMinimizeRequest(addressOf(w));
+#endif
         }
 
         // P4: the app started Hyprland's interactive move from its toolbar. On a zoomed window (the press recorded before
@@ -164,7 +185,7 @@ namespace gf::chrome {
         void onRequestMove(const PHLWINDOWREF& ref) {
             auto&      s = st();
             const auto w = ref.lock();
-            if (!w || !w->m_isMapped || !isClientChrome(w) || !g_pInputManager || !g_layoutManager)
+            if (!w || !gf::mapped(w) || !isClientChrome(w) || !g_pInputManager || !g_layoutManager)
                 return;
             if (!s.press || !moveAnswersPress(s.press, addressOf(w), g_pInputManager->hasHeldButtons(), nowMs()))
                 return;
@@ -314,7 +335,7 @@ namespace gf::chrome {
             const auto& windows = Desktop::windowState()->windows();
             for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
                 const auto& w = *it;
-                if (!w || !w->m_isMapped || w->isHidden() || !w->m_workspace || !w->m_workspace->isVisible())
+                if (!w || !gf::mapped(w) || w->isHidden() || !w->m_workspace || !gf::visible(w->m_workspace))
                     continue;
                 if (w->getWindowMainSurfaceBox().containsPoint(pos))
                     return w;
@@ -346,7 +367,7 @@ namespace gf::chrome {
         s.listeners.push_back(ev.fullscreen.listen([](const PHLWINDOW& w) { guarded("client chrome window.fullscreen", [&] { onFullscreen(w); }); }));
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
-                if (w && w->m_isMapped)
+                if (w && gf::mapped(w))
                     watch(w);
             }
         }

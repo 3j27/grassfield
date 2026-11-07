@@ -1,14 +1,17 @@
 #pragma once
 
+#include "hyprcompat.hpp"
+
 // Grassfield titlebar: a window decoration with close / minimize / zoom buttons and a centered title.
 // Geometry and hit-testing live in core/TitlebarLayout.* (no Hyprland dependency).
 
 #include "core/TitlebarLayout.hpp"
 
-#include <hyprland/src/desktop/view/Window.hpp>
+
 #include <hyprland/src/devices/IPointer.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/render/decorations/IHyprWindowDecoration.hpp>
+#include <hyprland/src/render/Context.hpp>
 
 #include <array>
 #include <optional>
@@ -28,7 +31,11 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
 
     SDecorationPositioningInfo getPositioningInfo() override;
     void                       onPositioningReply(const SDecorationPositioningReply& reply) override;
+#if GF_HYPRLAND_API_57
+    void                       draw(Render::CRenderContext& ctx, PHLMONITOR monitor, float const& alpha, const Render::SWindowRenderPresentation& presentation) override;
+#else
     void                       draw(PHLMONITOR monitor, float const& alpha) override;
+#endif
     eDecorationType            getDecorationType() override;
     void                       updateWindow(PHLWINDOW window) override;
     void                       damageEntire() override;
@@ -101,7 +108,7 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     static void updateReveal();
     // RENDER_POST_WINDOWS (after the windows, before the overlay layers: the menu bar stays above it): the revealed
     // titlebars on the monitor being rendered.
-    static void drawRevealed();
+    static void drawRevealed(Render::CRenderContext* ctx = nullptr);
     // TL30, TL34: the desktop under `pos` is covered for the plugin's pointer affordances (the zoom light's hover, the
     // shared-edge handle): the session is locked, a foreign Exclusive layer is mapped, or a Top or Overlay layer (or a layer
     // popup) is under the point (core hoverCoverEffect is not None). Read only.

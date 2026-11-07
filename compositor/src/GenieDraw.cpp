@@ -269,8 +269,16 @@ void main() {
 
     CGenieElement::CGenieElement(SDrawData&& data) : m_data(std::move(data)) {}
 
+#if GF_HYPRLAND_API_57
+    std::vector<UP<IPassElement>> CGenieElement::draw(Render::CRenderContext& ctx) {
+#else
     std::vector<UP<IPassElement>> CGenieElement::draw() {
+#endif
+#if GF_HYPRLAND_API_57
+        gf::guarded("genie draw", [this, &ctx] {
+#else
         gf::guarded("genie draw", [this] {
+#endif
             const auto t0 = std::chrono::steady_clock::now();
             auto&      s  = gl();
             ++s.drawn;
@@ -283,7 +291,11 @@ void main() {
 
             // Damage of this frame (pixels of the monitor, before its transform) inside the mesh's box: nothing is drawn
             // outside it (those pixels are not repainted this frame; anything drawn there would stay on screen).
+#if GF_HYPRLAND_API_57
+            CRegion damage = ctx.m_data.damage.copy();
+#else
             CRegion damage = g_pHyprRenderer->m_renderData.damage.copy();
+#endif
             damage.intersect(CBox{d.pixelBounds}.expand(1.0));
             if (damage.empty())
                 return;
@@ -308,7 +320,11 @@ void main() {
             glBindBuffer(GL_ARRAY_BUFFER, s.vbo);
             glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data(), GL_STREAM_DRAW);
 
+#if GF_HYPRLAND_API_57
+            const auto proj = g_pHyprRenderer->projectBoxToTarget(ctx, d.pixelBounds, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
+#else
             const auto proj = g_pHyprRenderer->projectBoxToTarget(d.pixelBounds, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
+#endif
             glUseProgram(s.program);
             glUniformMatrix3fv(s.locProj, 1, GL_TRUE, proj.data());
             glUniform1i(s.locTex, 0);
@@ -323,8 +339,12 @@ void main() {
 
             Render::GL::g_pHyprOpenGL->blend(true);
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); // premultiplied, Hyprland's blend function
-            damage.forEachRect([&s](const pixman_box32_t& rect) {
+            damage.forEachRect([&](const pixman_box32_t& rect) {
+#if GF_HYPRLAND_API_57
+                Render::GL::g_pHyprOpenGL->scissor(ctx, &rect);
+#else
                 Render::GL::g_pHyprOpenGL->scissor(&rect);
+#endif
                 glDrawElements(GL_TRIANGLES, s.indexCount, GL_UNSIGNED_SHORT, nullptr);
             });
             g_pHyprRenderer->disableScissor();
@@ -340,11 +360,19 @@ void main() {
         return {};
     }
 
+#if GF_HYPRLAND_API_57
+    bool CGenieElement::needsLiveBlur(Render::CRenderContext&) {
+#else
     bool CGenieElement::needsLiveBlur() {
+#endif
         return false;
     }
 
+#if GF_HYPRLAND_API_57
+    bool CGenieElement::needsPrecomputeBlur(Render::CRenderContext&) {
+#else
     bool CGenieElement::needsPrecomputeBlur() {
+#endif
         return false;
     }
 
@@ -356,11 +384,19 @@ void main() {
         return EK_CUSTOM;
     }
 
+#if GF_HYPRLAND_API_57
+    std::optional<CBox> CGenieElement::boundingBox(Render::CRenderContext&) {
+#else
     std::optional<CBox> CGenieElement::boundingBox() {
+#endif
         return m_data.logicalBounds;
     }
 
+#if GF_HYPRLAND_API_57
+    CRegion CGenieElement::opaqueRegion(Render::CRenderContext&) {
+#else
     CRegion CGenieElement::opaqueRegion() {
+#endif
         return {};
     }
 

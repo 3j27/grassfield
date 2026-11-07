@@ -20,6 +20,7 @@
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/render/Texture.hpp>
 #include <hyprland/src/render/pass/PassElement.hpp>
+#include <hyprland/src/render/Context.hpp>
 
 #include <cstdint>
 #include <optional>
@@ -75,13 +76,24 @@ namespace gf::genie {
         CGenieElement(CGenieElement&&)                 = delete;
         CGenieElement& operator=(CGenieElement&&)      = delete;
 
+#if GF_HYPRLAND_API_57
+        std::vector<UP<IPassElement>> draw(Render::CRenderContext& ctx) override;
+        bool                          needsLiveBlur(Render::CRenderContext& ctx) override;
+        bool                          needsPrecomputeBlur(Render::CRenderContext& ctx) override;
+#else
         std::vector<UP<IPassElement>> draw() override;
         bool                          needsLiveBlur() override;
         bool                          needsPrecomputeBlur() override;
+#endif
         const char*                   passName() override;
         ePassElementType              type() override;
+#if GF_HYPRLAND_API_57
+        std::optional<CBox>           boundingBox(Render::CRenderContext& ctx) override;
+        CRegion                       opaqueRegion(Render::CRenderContext& ctx) override;
+#else
         std::optional<CBox>           boundingBox() override;
         CRegion                       opaqueRegion() override;
+#endif
 
       private:
         SDrawData m_data;
