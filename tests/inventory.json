@@ -467,6 +467,7 @@
  {"path": "tests/shell/audio_dev_guard.sh", "layer": "headless"},
  {"path": "tests/shell/displays_publish.sh", "layer": "headless"},
  {"path": "tests/shell/displays_trial.sh", "layer": "headless"},
+ {"path": "tests/shell/displays_modeless.sh", "layer": "headless"},
  {"path": "tests/shell/hypr_socket_errors.sh", "layer": "headless"},
  {"path": "tests/shell/shell_watchdog.sh", "layer": "logic"},
  {"path": "tests/shell/shell_watchdog_hook.sh", "layer": "headless"},

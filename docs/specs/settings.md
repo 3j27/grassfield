@@ -393,6 +393,13 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
 - The desktop entry uses the stock `preferences-system` icon; swap to the Grassfield `gear` once the icon set is installed into an icon theme.
 - Concurrent writers: the shell (`SettingsStore`) writes by merge. Setters record dirty keys, the file is re-read right before the write and only those keys are replaced, atomically; external edits made within the save delay survive, and keys outside the schema are preserved (the schema forbids them, but a writer never drops what it does not own). A fresh or empty file is created from the full defaults.
 - The Settings app edits by parse and re-serialize (`Store.js`), which cannot keep integers beyond 2^53, duplicate keys or integer-like object keys. A file containing any of them is treated like a malformed file: read-only with a "cannot be edited safely" banner, file untouched. The schema has no such values, so only hand-made files are affected. The detection is shared (`ui/Grassfield/Ui/JsonSafety.js`, also catching duplicate `__proto__` keys and big integers written with a decimal point or exponent); the shell's `SettingsStore` applies it too: it never rewrites such a file (warns once, keeps the changes in memory, `writeBlocked`).
+- Displays after sleep (the owner's rc6 report): a display that comes back on without a mode (Hyprland lists it enabled at
+  0x0: it answered no video modes while asleep) is recovered by the shell (`shell/platform/Displays.qml` `checkModeless`: the
+  configuration read again after 3 s, doubled up to a minute, until it has a mode; journal lines "is on without a mode" and
+  "has a mode again"). Not recovered: Hyprland 0.56.2 retries a failed DPMS commit once, two frames later, and then keeps the
+  display marked on (`setDPMS` sets the state before the commit; a later "on" is a no-op), so a display too slow to wake can
+  stay black with `dpmsStatus` true until it is unplugged; nothing in Hyprland's IPC tells it apart from a lit one. The
+  journal now says when a display arrives or leaves ("displays: added DP-1"), by its connector only.
 - Displays: once a display has a line in `displays.conf` (any kept change: resolution, refresh rate, rotation, arrangement),
   that line's scale, mode and position win over the user's Omarchy `~/.config/hypr/monitors.lua` for that display in the
   Grassfield session (`config/hypr/grassfield/displays.lua` runs after it; Hyprland takes the last matching rule), so a scale

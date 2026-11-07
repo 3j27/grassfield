@@ -101,4 +101,42 @@ TestCase {
         for (const t of [null, {id: "a", state: "applied"}, {id: "a", state: "kept"}, {id: "a", state: "reverted"}])
             verify(DisplaysFile.answered(t, "a", 2, 2, true) === t, JSON.stringify(t));
     }
+
+    // A display that came back without a mode: Hyprland lists it enabled at 0x0 (a monitor asleep or switched off when it was
+    // probed answers a partial EDID with no video modes, and powering it on fires no hot-plug). Omarchy's session recovers it
+    // (omarchy-hyprland-monitor-watch: omarchy-hyprland-monitor-modeless, then a reload); Grassfield's did not, so the display
+    // stayed black until it was unplugged and plugged back (the owner's rc6 report after sleep).
+    function test_modeless() {
+        compare(DisplaysFile.modeless([]), []);
+        compare(DisplaysFile.modeless(null), []);
+        compare(DisplaysFile.modeless([{name: "eDP-1", width: 1920, height: 1080, disabled: false}]), []);
+        compare(DisplaysFile.modeless([{name: "DP-1", width: 0, height: 0, disabled: false}, {name: "DP-2", width: 2560, height: 1440}]), ["DP-1"]);
+        compare(DisplaysFile.modeless([{name: "DP-1", width: 2560, height: 0}]), ["DP-1"]);
+        // A display the user switched off (disabled) is not one; nor an answer without a name or without sizes (in flight).
+        compare(DisplaysFile.modeless([{name: "eDP-1", width: 0, height: 0, disabled: true}]), []);
+        compare(DisplaysFile.modeless([{width: 0, height: 0}, {name: "DP-3"}, {name: "DP-4", width: "0", height: "0"}, null]), []);
+    }
+
+    // A display arriving or leaving goes to the journal by its connector only (the event's description holds the serial).
+    function test_eventOutput() {
+        compare(DisplaysFile.eventOutput("1,DP-1,Dell Inc. DELL U2723QE ABC123"), "DP-1");
+        compare(DisplaysFile.eventOutput("0,HDMI-A-1,"), "HDMI-A-1");
+        compare(DisplaysFile.eventOutput("DP-1"), "(unnamed)");
+        compare(DisplaysFile.eventOutput(""), "(unnamed)");
+        compare(DisplaysFile.eventOutput(undefined), "(unnamed)");
+        compare(DisplaysFile.eventOutput("2,bad name\n,x"), "(unnamed)");
+    }
+
+    // Asked again with a growing wait, as Omarchy's watcher does: 3 s, doubled after each reload, at most a minute (a display
+    // switched off at its own button can stay without a mode all night).
+    function test_recoveryDelay() {
+        compare(DisplaysFile.recoveryDelayMs(0), 3000);
+        compare(DisplaysFile.recoveryDelayMs(1), 6000);
+        compare(DisplaysFile.recoveryDelayMs(2), 12000);
+        compare(DisplaysFile.recoveryDelayMs(4), 48000);
+        compare(DisplaysFile.recoveryDelayMs(5), 60000);
+        compare(DisplaysFile.recoveryDelayMs(500), 60000);
+        compare(DisplaysFile.recoveryDelayMs(-1), 3000);
+        compare(DisplaysFile.recoveryDelayMs(NaN), 3000);
+    }
 }

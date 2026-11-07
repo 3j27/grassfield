@@ -136,6 +136,13 @@ have "omarchy-brightness-display-ddc still takes <monitor> [+N%|N%-|N%] (Brightn
 for th in catppuccin-latte tokyo-night; do
   have "theme $th exists (a default of terminal.lightTheme/darkTheme)" test -d "$omarchy/themes/$th"
 done
+# Omarchy's monitor watcher is not run in the Grassfield session; shell/platform/Displays.qml copies its "display on without a
+# mode" rule (DisplaysFile.modeless) and recovers the same way (a reload with a back-off). A change of the rule is read and ported.
+if [[ -e $omarchy/bin/omarchy-hyprland-monitor-modeless ]]; then
+  have "omarchy-hyprland-monitor-modeless still decides 'enabled at 0x0' (DisplaysFile.modeless copies it)" has_grep '.disabled != true and (.width == 0 or .height == 0)' "$omarchy/bin/omarchy-hyprland-monitor-modeless"
+else
+  info "omarchy-hyprland-monitor-modeless not found (this Omarchy has no modeless recovery of its own to compare with)"
+fi
 have "omarchy-restart-hyprctl still reloads through hyprctl by name (grassfield-terminal-theme's private stand-in catches it)" has_grep '^hyprctl.* reload' "$omarchy/bin/omarchy-restart-hyprctl"
 have "omarchy-theme-set-browser-policy still reaches pkexec by name (grassfield-terminal-theme's private stand-in refuses it)" has_grep 'exec pkexec ' "$omarchy/bin/omarchy-theme-set-browser-policy"
 have "omarchy-theme-set calls no omarchy-restart-shell, qs, quickshell or systemctl (nothing may restart grassfield-shell)" \
