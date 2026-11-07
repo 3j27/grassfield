@@ -30,6 +30,7 @@
 #include <QProcessEnvironment>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QUrl>
 
 #include <pwd.h>
@@ -97,7 +98,10 @@ Source catalogSource()
         s.catalog = override;
         s.devPlumbing = true;
     } else if (fetchable(channel)) {
-        s.catalog = catalogUrl(channel);
+        const QString arch = QSysInfo::currentCpuArchitecture() == QLatin1String("aarch64")
+                                 ? QStringLiteral("aarch64")
+                                 : QStringLiteral("x86_64");
+        s.catalog = catalogUrl(channel, arch);
         s.base = channel;
     }
     return s;
@@ -107,7 +111,10 @@ QUrl iconSource(const Source &s, const QString &sha256)
 {
     if (s.devPlumbing)
         return s.catalog.resolved(QUrl(QStringLiteral("catalog/%1.png").arg(sha256)));
-    return s.base ? iconUrl(*s.base, sha256) : QUrl();
+    const QString arch = QSysInfo::currentCpuArchitecture() == QLatin1String("aarch64")
+                             ? QStringLiteral("aarch64")
+                             : QStringLiteral("x86_64");
+    return s.base ? iconUrl(*s.base, sha256, arch) : QUrl();
 }
 
 // The launcher icon of a web app: a file, or an icon name looked up where omarchy-webapp-install puts them.
