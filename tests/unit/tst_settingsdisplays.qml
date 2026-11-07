@@ -610,10 +610,12 @@ TestCase {
     }
 
     // The owner's report (rc6, development laptop): a 15.6" 1920 x 1080 panel (144 ppi, Hyprland's default 1.5) kept at 1.25 by
-    // displays.conf, and 100 % could not be chosen: the span stopped at the default / 1.25 = 1.2. A panel that is not high density
-    // (default 1.5 or less) always offers its native resolution as More Space, as macOS does for a display that is not Retina.
+    // displays.conf, and 100 % could not be chosen: the span stopped at the default / 1.25 = 1.2. A display below
+    // Displays.NATIVE_MAX_PPI (150) always offers its native resolution as More Space, as macOS does for a display that is not
+    // Retina; a denser one keeps macOS's span (review of e0a6e922: the 4K 27" lost its 3072 x 1728 step to native 3840 x 2160).
     function test_nativeResolutionOffered() {
         compare(Displays.defaultScale(ownerPanel), 1.5);
+        verify(Math.abs(Displays.ppi(ownerPanel) - 143.7) < 0.5, String(Displays.ppi(ownerPanel)));
         const c = Displays.scaleChoices(ownerPanel);
         verify(c.length <= Displays.MAX_CHOICES, JSON.stringify(c));
         const last = c[c.length - 1];
@@ -631,6 +633,20 @@ TestCase {
         compare(Displays.currentChoice(at1, 1), at1.length - 1);
         // A high-density panel (default 2) keeps macOS's span: no native resolution.
         verify(!Displays.scaleChoices(panel).some(x => x.scale === 1));
+        // A 4K 27" (163 ppi) and a 4K 24" (185 ppi): Hyprland's default 1.5 too, but above 150 ppi: macOS's span, unchanged from
+        // rc6, More Space 3072 x 1728, no native 3840 x 2160.
+        const k27 = {name: "DP-1", description: "Dell U2723QE", width: 3840, height: 2160, physicalWidth: 597, physicalHeight: 336, refreshRate: 60,
+            x: 0, y: 0, scale: 1.5, transform: 0, modes: []};
+        const k24 = Object.assign({}, k27, {name: "DP-2", physicalWidth: 527, physicalHeight: 296});
+        for (const m of [k27, k24]) {
+            compare(Displays.defaultScale(m), 1.5);
+            verify(Displays.ppi(m) > Displays.NATIVE_MAX_PPI, m.name + " " + Displays.ppi(m));
+            compare(Displays.scaleChoices(m).map(x => x.width + "x" + x.height), ["2304x1296", "2400x1350", "2560x1440", "2880x1620", "3072x1728"], m.name);
+        }
+        verify(Math.abs(Displays.ppi(k27) - 163.2) < 0.5, String(Displays.ppi(k27)));
+        verify(Math.abs(Displays.ppi(k24) - 185.1) < 0.5, String(Displays.ppi(k24)));
+        // Without a physical size the density is unknown: no native step is added (Hyprland's default is then 1, already native).
+        compare(Displays.ppi(Object.assign({}, k27, {physicalWidth: 0})), 0);
     }
 
     function test_refreshRates() {
