@@ -126,3 +126,33 @@ a pause (two notices are impossible for one set, at worst the intermediate set i
 NOT VERIFIED (no compositor here): hot-plug in a nested session (`hyprctl output create headless` through `scripts/nestctl`),
 the notice's look, the click opening Displays. Owner L2: plug a monitor never used with this laptop, wait 3 s, see one notice;
 unplug and plug again, no notice; lock, plug a new one, unlock, see it then.
+
+## Amendment A-2 2026-11-07: "Use as" on every display, the menu bar in Arrange
+Status: Proposed (2026-11-07), applied provisionally (owner rule of 2026-10-28: decide alone, the closest to macOS 27).
+
+Context: the owner (rc6, desktop PC with several displays) reported "there is no way to set the main display". The storage, the
+resolution and the shell side worked (`tests/unit/tst_displayrole.qml`, `tst_settingsdisplays.qml` test_page_mainDisplay), but the
+control was hard to reach: the page shows the first display, which is the main one when nothing was chosen (D-3: no built-in
+panel on a desktop, so the first output); D-4 gave the main display's "Use as" pop-up a single item, "Main display", so the role
+could not be moved from the display shown, and the row sat in the third group, after the resolution choices and the
+brightness, where nothing said that the band's pictures are buttons. Arrange… drew the main display's menu bar but did not let
+it move.
+
+Decision (macOS 27 Displays):
+- "Use as" is the first row of the selected display's settings, in a group of its own right under the band.
+- Every display's pop-up offers "Main display" and "Extended display" (in that order, macOS's), the main one too. "Extended
+  display" on the main display hands the role to another display: the built-in panel when it is another display, else the first
+  other display in the compositor's order (`DisplayRole.successor`); with one display there is no row (as before).
+- The band says "Main display" under the main display's name when several are connected (a caption in the secondary colour,
+  `Tokens.settingsDisplayRoleBaseline`): the role is visible before any click.
+- Arrange…: the main display's tile keeps the solid menu bar, and that bar can be dragged (a 12-pt strip along the tile's top,
+  `Tokens.settingsDisplayMenuBarGrab`) onto another display's tile; on Done that display becomes main (`ArrangeSheet.mainChosen`),
+  with the moved displays tried as before; Cancel drops it. The sheet's message says so. The keyboard path stays the pop-up.
+- The choice still applies at once (no trial: nothing about the picture changes) and is stored per set of connected displays (D-2).
+
+Not changed: mirroring (D-4), the XWayland primary output (D-6), window placement (D-1).
+
+Tests: `tests/unit/tst_displayrole.qml` test_successorOfTheMainDisplay, `tests/unit/tst_settingsdisplays.qml`
+test_page_useAsOnEveryDisplay (fails on rc6: the main display offered one choice and the row came after the resolution) and
+test_arrangeMovesTheMenuBar. NOT VERIFIED on the owner's displays: Settings > Displays with two or more monitors, the pop-up on
+the main display, the band's caption, dragging the menu bar in Arrange…, the Dock and the desktop icons moving.

@@ -88,8 +88,28 @@ SettingsPage {
     // Make the display `name` the main display of the connected set (macOS: Use as > Main display).
     function makeMain(name: string): void {
         const key = DisplayRole.keyOf(root.connected, name);
-        if (key !== "")
+        if (key !== "" && name !== root.mainName)
             root.store.set("displays.main", DisplayRole.withMain(root.mainEntries, root.connected, key));
+    }
+
+    // "Use as" (macOS 27, several displays): every display offers Main display and Extended display, the main one too (the
+    // owner's rc6 report: the main display's pop-up offered nothing else, so the role could not be moved from the display shown
+    // first). Mirroring is not offered (ADR-0044 D-4).
+    readonly property var useAsChoices: root.monitors.length > 1 ? [{id: "main", text: qsTr("Main display")}, {id: "extended", text: qsTr("Extended display")}] : []
+    readonly property string useAsValue: root.isMain ? "main" : "extended"
+
+    // The selected display's new role: Main display makes it main; Extended display on the main display hands the role to
+    // another one (DisplayRole.successor: the built-in panel, else the next display). Anything else changes nothing.
+    function useAs(role: string): void {
+        if (root.monitor === null || root.monitors.length < 2 || role === root.useAsValue)
+            return;
+        if (role === "main") {
+            root.makeMain(root.monitor.name);
+        } else if (role === "extended") {
+            const i = DisplayRole.identities(root.connected).indexOf(DisplayRole.successor(root.connected, DisplayRole.keyOf(root.connected, root.monitor.name)));
+            if (i >= 0)
+                root.makeMain(root.connected[i].name);
+        }
     }
 
     function refresh(): void {
@@ -262,6 +282,7 @@ SettingsPage {
         visible: root.monitors.length > 0
         monitors: root.monitors
         selected: root.monitor ? root.monitor.name : ""
+        mainName: root.mainName
         paneWidth: root.width
         onPicked: name => root.selected = name
     }
@@ -269,6 +290,25 @@ SettingsPage {
     SettingsGroup {
         visible: root.answered && root.monitors.length === 0
         footnote: qsTr("Display settings are not available: the Grassfield shell has not described the displays.")
+    }
+
+    // macOS 27: with several displays, "Use as" is the first of the selected display's settings. The main display holds the
+    // Dock, the desktop icons and the notifications (ADR-0044). Applied at once (no trial: nothing about the picture changes).
+    SettingsGroup {
+        visible: root.monitor !== null && root.useAsChoices.length > 0
+
+        SettingsRow {
+            title: qsTr("Use as")
+            subtitle: root.isMain ? qsTr("Holds the Dock, the desktop icons and the notifications.") : ""
+
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Use as")
+                model: root.useAsChoices
+                value: root.useAsValue
+                onPicked: id => root.useAs(id)
+            }
+        }
     }
 
     SettingsGroup {
@@ -313,26 +353,6 @@ SettingsPage {
     SettingsGroup {
         visible: root.monitor !== null
         footnote: root.monitor !== null && !root.nameable ? qsTr("This display has no name Grassfield can keep its settings under.") : root.notice
-
-        // macOS: "Use as" on each display with several connected. The main display holds the Dock, the desktop icons and the
-        // notifications; it stays main until another display is made main (so it offers no "Extended display"). Mirroring is not
-        // offered.
-        SettingsRow {
-            visible: root.monitors.length > 1
-            title: qsTr("Use as")
-            subtitle: root.isMain ? qsTr("Holds the Dock, the desktop icons and the notifications.") : ""
-
-            ComboBox {
-                inline: true
-                accessibleName: qsTr("Use as")
-                model: root.isMain ? [{id: "main", text: qsTr("Main display")}] : [{id: "extended", text: qsTr("Extended display")}, {id: "main", text: qsTr("Main display")}]
-                value: root.isMain ? "main" : "extended"
-                onPicked: id => {
-                    if (id === "main" && root.monitor)
-                        root.makeMain(root.monitor.name);
-                }
-            }
-        }
 
         SettingsRow {
             visible: root.rates.length > 1
