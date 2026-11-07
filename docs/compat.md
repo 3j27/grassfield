@@ -109,7 +109,7 @@ Grassfield did (each line has a test; `GRASSFIELD_TEST_OMARCHY_ALT=<a 4.5.0 chec
 
 | 4.5.0 change | Effect on Grassfield | Done |
 |---|---|---|
-| `omarchy-update-keyring` refreshes `omarchy-keyring` (and Arch ARM and platform keyrings) | the update helper refreshed only `archlinux-keyring` | the helper refreshes each installed keyring, failing closed; ARM and platform keyrings are not ported (x86_64 only) |
+| `omarchy-update-keyring` refreshes `omarchy-keyring` (and Arch ARM and platform keyrings) | the update helper refreshed only `archlinux-keyring` | the helper refreshes each installed keyring, failing closed; the ARM and platform keyrings are refreshed too when the machine is aarch64 (experimental), gated on an ARM-family repository in pacman.conf, key fingerprint pinned |
 | `omarchy-update-system-pkgs` goes through `omarchy-update-pacman` (a systemd scope, `OMARCHY_UPDATE_PACMAN=1`) | none: the helper already runs pacman in its own system unit with the guard variable | read, nothing to port |
 | new `omarchy-update-boot` | none on x86_64: `omarchy-lifecycle-dispatch` registers `update-verify` for Apple Silicon only (exit 0 elsewhere) | not mirrored; written in the helper's header |
 | `omarchy-update-restart` reads each kernel's `modules.builtin` (4.0.6: `vmlinuz`) | the helper's restart rule used `vmlinuz` only | either file, owned by a package, in the running kernel's folder counts; Settings reads the folder's existence, true on both |
