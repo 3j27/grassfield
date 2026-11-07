@@ -271,7 +271,15 @@ elseif case:match("^session") or case:match("^dev") then
     return { choose = function() return nil, "none" end, verifying = function() return true end, remember = function() end }
   end
   local entry = case:match("^session") and "session" or "dev"
-  if entry == "session" then fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "us" } })\n') end
+  if entry == "session" then
+    fixture(d .. "/omarchy", 'hl.config({ input = { kb_layout = "us" } })\n')
+    if os.getenv("USER_GESTURE") == "1" then
+      os.execute("mkdir -p " .. os.getenv("HOME") .. "/.config/hypr")
+      local f = assert(io.open(os.getenv("HOME") .. "/.config/hypr/input.lua", "w"))
+      f:write('hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })\n')
+      f:close()
+    end
+  end
   local ok, err = pcall(dofile, os.getenv("TREE") .. "/" .. entry .. ".lua")
   if not ok then say("error", tostring(err)) end
   table.sort(gestures)
@@ -445,6 +453,9 @@ desc="ADR-0035 D-2 (decision 3-15): Hyprland's config-error bar stays on, debug.
 check grep -q "^session .* suppress false gestures " <<<"$out"
 desc="session.lua: Settings > Trackpad > More Gestures applies in the real session (Spaces swipe off; grassfield.input stays loaded for bindings.lua)"
 check grep -q "^session .* gestures 3:down 3:up 4:pinchin 4:pinchout$" <<<"$out"
+out=$(run session-user-gesture TREE="$root/config/hypr" OMARCHY_PATH="$tmp/session-user-gesture/omarchy" USER_GESTURE=1)
+desc="session.lua leaves a user's horizontal workspace gesture in place instead of registering a shadowing duplicate"
+check grep -q "^session-user-gesture ran true .* gestures 3:down 3:horizontal 3:up 4:pinchin 4:pinchout$" <<<"$out"
 out=$(run session-broken TREE="$tmp/broken" OMARCHY_PATH="$tmp/session-broken/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/session-broken/cfg")
 desc="session.lua with an input.lua that cannot load: the parse goes on, the lock key and the lid switch are bound"
 check grep -q "^session-broken ran true lock true lid true pointer false " <<<"$out"
