@@ -335,7 +335,7 @@ preflight_common() {
 }
 
 preflight_install() {
-  local v os arch repo_list repo i first_o=-1 first_e=-1 repo_of_qs free tmpfree pending foreign cu_rc=0 foreign_sec
+  local v omarchy_dev os arch repo_list repo i first_o=-1 first_e=-1 repo_of_qs free tmpfree pending foreign cu_rc=0 foreign_sec
   os=$GF_ROOT/etc/os-release
   arch=$(uname -m)
   if [[ -r $os ]] && grep -Eq '^(ID|ID_LIKE)=.*\barch\b' "$os" && [[ $arch == x86_64 ]]; then
@@ -346,8 +346,14 @@ preflight_install() {
   fi
 
   v=$(pacman_version omarchy)
-  [[ -n $v ]] || v=$(pacman_version omarchy-dev)
-  if [[ -z $v ]]; then
+  omarchy_dev=$(pacman_version omarchy-dev)
+  if [[ -n $omarchy_dev ]]; then
+    # Dev packages use a commit counter (e.g. 4.0.0.r7608.g14abc07), not the stable release's
+    # semver. Package identity is authoritative; comparing that string with 4.0.6 via vercmp
+    # falsely rejects current development builds. Other preflights still validate its runtime.
+    note "Omarchy development build $omarchy_dev; release minimum check does not apply" \
+      "version de developpement Omarchy $omarchy_dev ; le minimum de version stable ne s applique pas"
+  elif [[ -z $v ]]; then
     bad 'Omarchy is not installed' 'Omarchy n est pas installe' 'install Omarchy 4.0.6 or newer first' 'installe d abord Omarchy 4.0.6 ou plus recent'
   elif (($(vercmp "$v" "$GF_MIN_OMARCHY") < 0)); then
     bad "Omarchy $v is older than $GF_MIN_OMARCHY" "Omarchy $v est plus ancien que $GF_MIN_OMARCHY" \
