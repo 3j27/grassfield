@@ -196,13 +196,13 @@ Singleton {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "monitoradded" || event.name === "monitoraddedv2" || event.name === "monitorremoved"
                 || event.name === "monitorremovedv2" || event.name === "configreloaded") {
+                Hyprland.refreshMonitors();
+                publishDebounce.restart();
                 // A display arriving or leaving, in the journal with its time: what a wake from sleep costs is read from these
                 // lines next to the kernel's "PM: suspend exit" and the lock's (the owner's rc6 report: slow wake). The v2
                 // event carries the id and the description too: only the connector name is logged (no serial in the journal).
                 if (event.name === "monitoraddedv2" || event.name === "monitorremovedv2")
                     console.info("grassfield-shell: displays: " + (event.name === "monitoraddedv2" ? "added " : "removed ") + DisplaysFile.eventOutput(event.data));
-                Hyprland.refreshMonitors();
-                publishDebounce.restart();
             }
         }
     }
