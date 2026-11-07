@@ -699,18 +699,72 @@ pacman_run() { # report downloads pacman-argument...
 
 # omarchy-update-keyring: the signing keyrings first, when a newer one is out (`--needed`, Omarchy 4.0.6's form: new or
 # revoked keys come as a new version). Omarchy 4.5.0 refreshes omarchy-keyring beside archlinux-keyring: the same here, each
-# one only when installed (anything else has no such package). Not ported: the Arch Linux ARM keyring and the platform
-# keyrings Omarchy 4.5.0 reads from /usr/share/omarchy-platform/keyrings, which belong to the ARM platforms (Grassfield is
-# x86_64 only); a failed refresh of any keyring stops the update before the transaction, as Omarchy's set -e does.
+# one only when installed (anything else has no such package). Ported for the aarch64 build (the way omarchy-hw-aarch64
+# orders the ARM platforms): Arch Linux ARM signs its repositories with a key only archlinuxarm-keyring
+# carries, so that key is trusted before the transaction the way omarchy-update-keyring does it (the installed keyring is
+# populated; without the package its key is fetched by fingerprint from keyserver.ubuntu.com, which keys.openpgp.org does
+# not carry, and locally signed), and the platform keyrings Omarchy 4.5.0 lists in /usr/share/omarchy-platform/keyrings are
+# refreshed only when installed (a line that is not one keyring package name is skipped with a warning, so a mistake in the
+# list cannot stop every update). It runs on an aarch64 machine whose repositories are Arch Linux ARM ones (`alarm`, a
+# `alarm-`/`asahi-alarm` repository): an Omarchy ARM machine has them, and a container without them (the update helper test's
+# throwaway root) is left alone, whatever the machine's arch. A failed refresh of any keyring stops the update before the
+# transaction, as Omarchy's set -e does.
+alarm_family=0
+if [[ $(uname -m) == aarch64 ]]; then
+  for _alarm_repo in "${repos[@]}"; do
+    [[ $_alarm_repo == alarm || $_alarm_repo == alarm-* || $_alarm_repo == asahi-alarm ]] && alarm_family=1
+  done
+  unset -v _alarm_repo
+fi
+gpgdir=$(pacman-conf GPGDir 9<&-) || finish 8 "pacman-conf GPGDir failed"
+[[ $gpgdir == /* ]] || finish 8 "pacman's GPGDir is not an absolute path"
+key_trusted() { # <fingerprint>: 0 when the key is in pacman's keyring and valid (gpg's "pub:[fu]:")
+  [[ $1 =~ ^[0-9A-F]{40}$ ]] || return 1
+  [[ $(gpg --homedir "$gpgdir" --no-permission-warning --batch --with-colons --list-keys "$1" 2>/dev/null 9<&-) =~ (^|$'\n')pub:[fu]: ]]
+}
 keyrings=()
 for pkg in archlinux-keyring omarchy-keyring; do
   [[ -n ${installed[$pkg]-} ]] && keyrings+=("$pkg")
 done
+alarm_key=68B3537F39A313B3E574D06777193F152BDBE6A6
+alarm_missing=0
+if ((alarm_family)) && ! key_trusted "$alarm_key"; then
+  if [[ -n ${installed[archlinuxarm-keyring]-} ]]; then
+    no_db_lock
+    pacman-key --populate archlinuxarm 9<&- || finish 8 "pacman-key --populate archlinuxarm failed"
+  else
+    no_db_lock
+    pacman-key --recv-keys "$alarm_key" --keyserver keyserver.ubuntu.com 9<&- || finish 8 "cannot fetch Arch Linux ARM's signing key"
+    pacman-key --lsign-key "$alarm_key" 9<&- || finish 8 "pacman-key --lsign-key failed"
+    alarm_missing=1
+  fi
+fi
+if ((alarm_family)); then
+  if [[ -n ${installed[archlinuxarm-keyring]-} ]] || ((alarm_missing)); then
+    keyrings+=(archlinuxarm-keyring)
+  fi
+  platform_keyrings=/usr/share/omarchy-platform/keyrings
+  if [[ -f $platform_keyrings ]]; then
+    while read -r keyring extra || [[ -n $keyring ]]; do
+      [[ -n $keyring && $keyring != \#* ]] || continue
+      if [[ -n $extra || ! $keyring =~ ^[a-z0-9][a-z0-9@._+-]*-keyring$ ]]; then
+        echo "${GF_PROG}: skipping ${keyring}${extra:+ $extra} in $platform_keyrings: not a keyring package name" >&2
+        continue
+      fi
+      if [[ -n ${installed[$keyring]-} && " ${keyrings[*]} " != *" $keyring "* ]]; then
+        keyrings+=("$keyring")
+      fi
+    done <"$platform_keyrings"
+  fi
+fi
 if ((${#keyrings[@]})); then
   progress keyring
   no_db_lock
   pacman_run 0 0 -S --needed --noconfirm --noprogressbar "${keyrings[@]}" || finish 8 "the signing keyrings (${keyrings[*]}) could not be updated"
   started=0
+fi
+if ((alarm_family)) && ! key_trusted "$alarm_key"; then
+  finish 8 "Arch Linux ARM's signing key $alarm_key is still not trusted"
 fi
 
 # omarchy-update-system-pkgs, without -y: the databases are the ones checked. OMARCHY_UPDATE_PACMAN=1 is what
