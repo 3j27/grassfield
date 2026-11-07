@@ -71,8 +71,10 @@ check bash -c 'grep -q "cmake --install \"\$srcdir/portal-settings-build\"" "$1"
 dropin=$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf
 desc="the frontend's unit only gains grassfield-portal-config before it starts (no ExecStart, Environment or other change of what the frontend and the apps it launches get)"
 check bash -c 'grep -qx "ExecStartPre=-/usr/lib/grassfield/grassfield-portal-config" "$1" && ! grep -Eq "^(ExecStart|Environment|EnvironmentFile|PassEnvironment|UnsetEnvironment|WorkingDirectory)=" "$1" && [[ -x "$2" ]]' _ "$dropin" "$pk/bin/grassfield-portal-config"
-desc="the session names Grassfield first in XDG_CURRENT_DESKTOP, after Omarchy's envs.lua, keeping Hyprland, and only in session.lua (the Omarchy session never loads it)"
-check bash -c 'n=$(grep -n "require(\"grassfield.omarchy\")" "$1" | head -n 1 | cut -d: -f1); m=$(grep -n "^hl.env(\"XDG_CURRENT_DESKTOP\", \"Grassfield:Hyprland\")$" "$1" | cut -d: -f1); [[ -n $n && -n $m && $m -gt $n ]]' _ "$root/config/hypr/session.lua"
+desc="UWSM sets Grassfield first in XDG_CURRENT_DESKTOP for this session; the compositor config does not override its managed variable"
+check grep -q '^Exec=uwsm start -e -D Grassfield:Hyprland ' "$root/packaging/wayland-sessions/grassfield.desktop" && \
+  grep -q '^DesktopNames=Grassfield;Hyprland$' "$root/packaging/wayland-sessions/grassfield.desktop" && \
+  ! grep -q 'hl.env("XDG_CURRENT_DESKTOP"' "$root/config/hypr/session.lua"
 if command -v systemd-analyze >/dev/null && [[ -r /usr/lib/systemd/user/xdg-desktop-portal.service ]]; then
   # The drop-in beside a copy of the stock unit, as systemd reads them.
   mkdir -p "$tmp/units/xdg-desktop-portal.service.d"
@@ -82,8 +84,8 @@ if command -v systemd-analyze >/dev/null && [[ -r /usr/lib/systemd/user/xdg-desk
   check bash -c '! systemd-analyze verify --user "$1/xdg-desktop-portal.service" 2>&1 | grep -qi "10-grassfield"' _ "$tmp/units"
 fi
 
-# The session's XDG_CURRENT_DESKTOP, read from session.lua; the real grassfield-portal-config, its path rewritten to a scratch copy.
-session_desktop=$(sed -n 's/^hl\.env("XDG_CURRENT_DESKTOP", "\(.*\)")$/\1/p' "$root/config/hypr/session.lua")
+# The session's XDG_CURRENT_DESKTOP from the UWSM session entry; the real grassfield-portal-config, its path rewritten to a scratch copy.
+session_desktop=$(sed -n 's/^DesktopNames=//p' "$root/packaging/wayland-sessions/grassfield.desktop" | tr ';' ':')
 sed "s|/usr/share/grassfield/xdg|$tmp/gf|g" "$pk/bin/grassfield-portal-config" >"$tmp/portal-config"
 # The real env file, its paths rewritten to a scratch copy.
 mkdir -p "$tmp/gf/xdg-desktop-portal"
@@ -140,7 +142,7 @@ settings() { # settings <dir> <json>: grassfield.json, replaced atomically as th
 # stand-in on demand, then the real frontend. Sets d.
 scenario() { # scenario <name> <yes|no|broken> [variant]: broken = the backend's activation fails when the frontend starts.
   # Variants, all with the user's own hyprland-portals.conf that Omarchy 4.5.0's migration 1788261467 installs (its bytes are
-  # compared after): omarchy45 = the Grassfield session (XDG_CURRENT_DESKTOP of session.lua; the frontend's unit runs
+  # compared after): omarchy45 = the Grassfield session (XDG_CURRENT_DESKTOP from its UWSM entry; the frontend's unit runs
   # grassfield-portal-config first); omarchy45-bare = no link and "Hyprland", the Omarchy session as it is, and what the Grassfield
   # session was before this fix (the control); omarchy45-leftover = "Hyprland" with the link a Grassfield session left in the
   # user's directory (the Omarchy session after one); omarchy45-dangling = the Grassfield session with a link whose target is gone

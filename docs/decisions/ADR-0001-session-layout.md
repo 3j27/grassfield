@@ -45,9 +45,9 @@ Option 1.
 
 ## Consequences
 - Omarchy module renames break the include → caught by the version check and C2-like fallback.
-- `XDG_CURRENT_DESKTOP=Hyprland` is kept (portals); Grassfield sets `XDG_SESSION_DESKTOP=Grassfield`. Amended 2026-11-05
-  (Omarchy 4.5.0, ADR-0045 amendment): the session's value is `Grassfield:Hyprland`, Hyprland still an item of the list, so
-  that xdg-desktop-portal reads the user's `grassfield-portals.conf` before the `hyprland-portals.conf` Omarchy writes.
+- Grassfield sets `XDG_SESSION_DESKTOP=Grassfield`; UWSM sets `XDG_CURRENT_DESKTOP=Grassfield:Hyprland` from the session entry.
+  Hyprland remains an item, so xdg-desktop-portal reads the user's `grassfield-portals.conf` before the `hyprland-portals.conf`
+  Omarchy writes. The compositor config does not override UWSM's managed variable.
 - Revisit if Omarchy exposes a stable "hardware only" include.
 
 ## Amendment 2026-10-29: the real session does not watch its own files
