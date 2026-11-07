@@ -12,7 +12,7 @@
 -- Capability check, not a version check: /usr/share/omarchy/version is a stale upstream file (docs/compat.md). What
 -- matters is whether the modules named below exist; scripts/dev/omarchy-compat.sh checks the same list.
 
-local M = { ok = false, reason = nil, monitors = true, input = "none", input_applied = false, problems = {} }
+local M = { ok = false, reason = nil, monitors = true, input = "none", input_applied = false, user_input_loaded = false, problems = {} }
 
 local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
 local home = os.getenv("HOME") or ""
@@ -144,6 +144,7 @@ if exists(home .. "/.config/hypr/monitors.lua") then
 end
 if exists(home .. "/.config/hypr/input.lua") then
   local uok, uerr = pcall(require, "hypr.input")
+  M.user_input_loaded = uok
   if not uok then problem("input.lua: " .. tostring(uerr)) end
 end
 

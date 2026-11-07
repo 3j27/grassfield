@@ -275,7 +275,10 @@ bind("XF86KbdBrightnessDown", "Keyboard brightness down", shell("keyboard", "dow
 -- Gestures turns each off (mouse-trackpad.lua, read by grassfield.input, which the session loads first; without it, all on).
 local input = package.loaded["grassfield.input"]
 local gestures = (type(input) == "table" and input.settings) and input.settings() or { gesture_spaces = true, gesture_overview = true, gesture_apps = true }
-if gestures.gesture_spaces then
+-- The user's input.lua may already define this gesture (Omarchy's template does). Never register a second
+-- horizontal gesture: Hyprland treats it as shadowed even when both actions are identical. User input wins.
+local omarchy = package.loaded["grassfield.omarchy"]
+if gestures.gesture_spaces and not (type(omarchy) == "table" and omarchy.user_input_loaded) then
   hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 end
 if gestures.gesture_overview then
