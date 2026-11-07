@@ -338,11 +338,11 @@ preflight_install() {
   local v os arch repo_list repo i first_o=-1 first_e=-1 repo_of_qs free tmpfree pending foreign cu_rc=0 foreign_sec
   os=$GF_ROOT/etc/os-release
   arch=$(uname -m)
-  if [[ -r $os ]] && grep -Eq '^(ID|ID_LIKE)=.*\barch\b' "$os" && [[ $arch == x86_64 ]]; then
+  if [[ -r $os ]] && grep -Eq '^(ID|ID_LIKE)=.*\barch\b' "$os" && [[ $arch == x86_64 || $arch == aarch64 ]]; then
     ok "Arch Linux ($arch)" "Arch Linux ($arch)"
   else
-    bad "this is not Arch Linux on x86_64 ($arch)" "ce n est pas Arch Linux en x86_64 ($arch)" \
-      'Grassfield supports Omarchy on x86_64 only' 'Grassfield ne gere qu Omarchy en x86_64'
+    bad "this is not Arch Linux on x86_64 or aarch64 ($arch)" "ce n est pas Arch Linux en x86_64 ou aarch64 ($arch)" \
+      'Grassfield packages target x86_64; aarch64 is experimental, and other architectures are unsupported' 'Grassfield cible x86_64 ; aarch64 est experimental et les autres architectures ne sont pas gerees'
   fi
 
   v=$(pacman_version omarchy)
