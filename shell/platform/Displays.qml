@@ -72,15 +72,19 @@ Singleton {
     // was probed) and nothing fires when it powers on: the configuration is read again, after DisplaysFile.recoveryDelayMs, until
     // every display has a mode (Omarchy's own session does the same with omarchy-hyprland-monitor-watch, which Grassfield's
     // autostart does not run). While locked the lock refreshes the monitors every second, so a display that gets its mode is
-    // seen at once; the look goes on with the back-off for as long as one stays without a mode.
+    // seen at once; the look goes on with the back-off for as long as one stays without a mode. Quickshell's plain `monitors`
+    // answer lists every enabled output that is not a mirror, whatever its mode (Hyprland 0.56.2 MonitorState); a mirror
+    // without a mode is only in `monitors all` and is not recovered here (docs/specs/settings.md Known limitations).
     property var modelessNames: []
     property int recoveryAttempts: 0
 
     function checkModeless(monitors: var): void {
         const blank = DisplaysFile.modeless(monitors);
+        // The journal hears of a change of state only (on without a mode, a mode again), never of each look or reload: a display
+        // switched off at its button can stay without a mode all night.
         if (blank.length === 0) {
             if (root.modelessNames.length > 0)
-                console.info("grassfield-shell: displays: " + root.modelessNames.join(", ") + " has a mode again");
+                console.info("grassfield-shell: displays: " + root.modelessNames.join(", ") + " has a mode again (after " + root.recoveryAttempts + " reloads)");
             root.modelessNames = [];
             root.recoveryAttempts = 0;
             recovery.stop();
@@ -106,8 +110,7 @@ Singleton {
             // A display trial reads the configuration itself (and takes it back): look again after it.
             if (root.running === "") {
                 root.recoveryAttempts++;
-                console.info("grassfield-shell: displays: " + blank.join(", ") + " still has no mode; reading the configuration again (" + root.recoveryAttempts + ")");
-                SessionConfig.reload("display without a mode", Tokens.materialBlurAnswerMs);
+                SessionConfig.reloadQuietly("display without a mode", Tokens.materialBlurAnswerMs);
             }
             recovery.interval = DisplaysFile.recoveryDelayMs(root.recoveryAttempts);
             recovery.restart();

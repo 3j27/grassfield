@@ -1383,6 +1383,11 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   locked, the clock after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
 
 ## Known limitations
+- A display that is on without a mode (Hyprland lists it at 0x0 and draws nothing on it, so it reports only `WORKSPACE`
+  in `solitaryBlockedBy`) can delay the sleep-lock fallback's confirmation by about 12 s: the `omarchy-shell` stand-in's
+  `lock status` stays fail-closed and wants `LOCK` on every monitor (integrator decision 2026-11-07), so Omarchy's script
+  waits out its budget before the sleep, on the first sleep of a login while its unit still runs; the shell's own
+  recovery (`shell/platform/Displays.qml` `checkModeless`) gives the display its mode back within seconds to a minute.
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
 - L3 cannot be verified in nested.
 - VERIFIED 2026-10-17 (nested): polkit agents register per logind session. The nested shell shares the owner's

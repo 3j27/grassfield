@@ -106,10 +106,15 @@ if grep -qvE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log"; then
 else
   echo "PASS: displays_modeless only reloads and JSON queries reached Hyprland"
 fi
-if grep -q 'DP-1 is on without a mode (0x0)' <<<"$out" && grep -q 'DP-1 has a mode again' <<<"$out"; then
-  echo "PASS: displays_modeless the journal says when a display has no mode and when it has one again"
+# The journal hears of each change of state once, never of each reload (review of 70dea8b0: a display that stays without a
+# mode all night would otherwise log every minute).
+blank=$(grep -c 'DP-1 is on without a mode (0x0)' <<<"$out" || true)
+again=$(grep -c 'DP-1 has a mode again (after 2 reloads)' <<<"$out" || true)
+noisy=$(grep -cE 'session config read again \(display without a mode\)|still has no mode' <<<"$out" || true)
+if [[ $blank == 1 && $again == 1 && $noisy == 0 ]]; then
+  echo "PASS: displays_modeless the journal says once that a display has no mode and once that it has one again, nothing per reload"
 else
-  echo "FAIL: displays_modeless the journal lines are missing"; fail=1
+  echo "FAIL: displays_modeless journal lines: 'on without a mode' $blank (want 1), 'has a mode again (after 2 reloads)' $again (want 1), per-reload lines $noisy (want 0)"; fail=1
 fi
 if grep -q 'grassfield-shell: displays: added DP-1$' <<<"$out" && ! grep -q 'SERIAL-9' <<<"$out"; then
   echo "PASS: displays_modeless a display arriving is in the journal by its connector, without its serial"

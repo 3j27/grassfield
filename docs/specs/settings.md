@@ -396,7 +396,11 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
 - Displays after sleep (the owner's rc6 report): a display that comes back on without a mode (Hyprland lists it enabled at
   0x0: it answered no video modes while asleep) is recovered by the shell (`shell/platform/Displays.qml` `checkModeless`: the
   configuration read again after 3 s, doubled up to a minute, until it has a mode; journal lines "is on without a mode" and
-  "has a mode again"). Not recovered: Hyprland 0.56.2 retries a failed DPMS commit once, two frames later, and then keeps the
+  "has a mode again", once each, nothing per reload). The shell reads Hyprland's plain `monitors` answer (Quickshell's
+  query), which lists every enabled output that is not a mirror whatever its mode (Hyprland 0.56.2 `MonitorState`: the
+  plain list is the enabled non-mirror outputs, `monitors all` adds the disabled ones and the mirrors), so a mirrored
+  display (a `mirror` rule in the user's `monitors.lua`; Settings offers no mirroring) that comes back without a mode is
+  not seen and not recovered; Omarchy's own check reads `monitors all` for that reason. Not recovered either: Hyprland 0.56.2 retries a failed DPMS commit once, two frames later, and then keeps the
   display marked on (`setDPMS` sets the state before the commit; a later "on" is a no-op), so a display too slow to wake can
   stay black with `dpmsStatus` true until it is unplugged; nothing in Hyprland's IPC tells it apart from a lit one. The
   journal now says when a display arrives or leaves ("displays: added DP-1"), by its connector only.
