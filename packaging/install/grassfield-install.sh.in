@@ -17,6 +17,7 @@ readonly GF_BASE='@GRASSFIELD_REPO_BASE@'
 readonly GF_FPR='@GRASSFIELD_SIGNING_FINGERPRINT@'
 readonly GF_KEYSERVER=hkps://keys.openpgp.org
 readonly GF_MIN_OMARCHY=4.0.6
+readonly GF_MIN_OMARCHY_DEV=4.0.0.r7608
 readonly GF_MIN_FREE_MIB=4096
 readonly GF_PKGS=(grassfield-desktop grassfield-compositor grassfield-store)
 readonly GF_THEME_PKG=grassfield-login-themes
@@ -348,11 +349,16 @@ preflight_install() {
   v=$(pacman_version omarchy)
   omarchy_dev=$(pacman_version omarchy-dev)
   if [[ -n $omarchy_dev ]]; then
-    # Dev packages use a commit counter (e.g. 4.0.0.r7608.g14abc07), not the stable release's
-    # semver. Package identity is authoritative; comparing that string with 4.0.6 via vercmp
-    # falsely rejects current development builds. Other preflights still validate its runtime.
-    note "Omarchy development build $omarchy_dev; release minimum check does not apply" \
-      "version de developpement Omarchy $omarchy_dev ; le minimum de version stable ne s applique pas"
+    # Development versions use a commit counter, so compare them with their own tested floor.
+    if (($(vercmp "$omarchy_dev" "$GF_MIN_OMARCHY_DEV") < 0)); then
+      bad "Omarchy development build $omarchy_dev is older than the oldest one Grassfield was tested on ($GF_MIN_OMARCHY_DEV)" \
+        "La version de developpement Omarchy $omarchy_dev est plus ancienne que la plus ancienne version testee avec Grassfield ($GF_MIN_OMARCHY_DEV)" \
+        "update Omarchy to development build $GF_MIN_OMARCHY_DEV or newer with its own update, then run this again" \
+        "mets Omarchy a jour vers la version de developpement $GF_MIN_OMARCHY_DEV ou plus recente, puis relance"
+    else
+      note "Omarchy development build $omarchy_dev; minimum tested development build is $GF_MIN_OMARCHY_DEV" \
+        "version de developpement Omarchy $omarchy_dev ; la version de developpement minimale testee est $GF_MIN_OMARCHY_DEV"
+    fi
   elif [[ -z $v ]]; then
     bad 'Omarchy is not installed' 'Omarchy n est pas installe' 'install Omarchy 4.0.6 or newer first' 'installe d abord Omarchy 4.0.6 ou plus recent'
   elif (($(vercmp "$v" "$GF_MIN_OMARCHY") < 0)); then
